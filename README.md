@@ -13,9 +13,11 @@ The Digital Clinic Accessibility Router is a localised pathfinding application d
 
 **Core Features**
 
-Accessibility-First Routing: Evaluates paths based on elderly-specific constraints rather than just geographical distance.
-Composite Weighting System: Dynamically assigns "cost penalties" to routes featuring steep stairs (+15) or high-risk pedestrian crossings (+20), while rewarding sheltered walkways (-3).
-Hazard Avoidance: Actively routes vulnerable pedestrians away from high-traffic collision zones, applying practical computer engineering concepts to community safety.
+  - **Accessibility-First Routing:** Evaluates paths based on elderly-specific constraints rather than just geographical distance.
+
+  - **Composite Weighting System:** Dynamically assigns "cost penalties" to routes featuring steep stairs (+15) or high-risk pedestrian crossings (+20), while rewarding sheltered walkways (-3).
+
+  - **Hazard Avoidance:** Actively routes vulnerable pedestrians away from high-traffic collision zones, applying practical computer engineering concepts to community safety.
 
 **Algorithm Details: Dijkstra's Algorithm (Array Implementation)**
 
@@ -28,18 +30,26 @@ Implementation Note: To suit the localised, small-scale nature of a single HDB n
 
 
 To run the accessibility router, follow these steps: 
-Download the .py files included in this repository. 
-Load them into your preferred IDE (e.g., VS Code, PyCharm). 
-Ensure you have Python 3.x installed on your machine. 
-No external libraries are required for the core algorithm.
-Run the main file to execute the routing script.
+
+  1. Download the .py files included in this repository. 
+
+  2.  Load them into your preferred IDE (e.g., VS Code, PyCharm). 
+
+  3. Ensure you have Python 3.x installed on your machine. 
+
+  4. No external libraries are required for the core algorithm.
+
+  4. Run the main file to execute the routing script.
 
 **Usage**
 
-
 When the script runs, the application initialises the Punggol neighbourhood graph. 
 It will output: 
-The starting location (e.g., Blk 273C).
-The destination (e.g., Digital Clinic). 
-The calculated optimal route dynamically avoids heavy penalties, such as stairs and unsheltered high-risk crossings.
-The final composite "Accessibility Cost Score."
+
+  - The starting location (e.g., Blk 273C).
+
+  - The destination (e.g., Digital Clinic). 
+
+  - The calculated optimal route dynamically avoids heavy penalties, such as stairs and unsheltered high-risk crossings.
+
+  - The final composite "Accessibility Cost Score."
