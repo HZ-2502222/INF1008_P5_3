@@ -164,3 +164,26 @@ def draw_neighbourhood_graph(graph_data, highlighted_route=None):
     
     plt.axis('off') ## Hide axes for better aesthetics
     return fig
+
+
+def analyse_route_safety(route, final_score, graph):
+    """Calculates the total penalty to determine how safe the route actually is."""
+    # Calculate the pure walking time by adding up the 'time' of each step in the final route
+    pure_walking_time = 0
+    for i in range(len(route) - 1):
+        current_node = route[i]
+        next_node = route[i+1]
+        pure_walking_time += graph[current_node][next_node]['time']
+        
+    # The difference between the final score and the pure time is the hazard penalty
+    total_penalty = final_score - pure_walking_time
+    
+    # Check safety level
+    if total_penalty == 0:
+        return "🟢 **Very Safe:** This route is completely sheltered and avoids all stairs and high-traffic crossings."
+    elif total_penalty <= 5:
+        return "🟡 **Moderately Safe:** This route avoids major hazards but may be partially unsheltered from rain or sun."
+    elif total_penalty <= 15:
+        return "🟠 **Caution Required:** This route contains steep stairs or overhead bridges. Not recommended for users with mobility issues."
+    else:
+        return "🔴 **High Risk:** This route navigates through known high-collision zones or multiple physical hazards. Please proceed with extreme caution."

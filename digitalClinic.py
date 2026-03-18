@@ -1,6 +1,6 @@
 import streamlit as st # For building the web app interface
 
-from functions import calculate_accessibility_weight, find_most_accessible_route_no_pq, draw_neighbourhood_graph
+from functions import calculate_accessibility_weight, find_most_accessible_route_no_pq, draw_neighbourhood_graph, analyse_route_safety
 
 # Graph representation of the neighborhood with accessibility attributes
 punggol_graph = {
@@ -30,7 +30,7 @@ punggol_graph = {
 
 
             
-# Streamlit App
+#Streamlit App
 
 # Page Config
 st.set_page_config(page_title="Accessibility Router", page_icon="🗺️")
@@ -78,5 +78,8 @@ if st.button('Find Safest Route', type="primary", use_container_width=True):
              
             # Format the route for display   
             formatted_route = " ➔ ".join(route)
+            safety_message = analyse_route_safety(route, final_score, punggol_graph)
+
             st.success(f"**Most Accessible Route:**\n\n{formatted_route}")
-            st.info(f"**Final Accessibility Cost Score:** {final_score}")
+            st.info(f"**Final Accessibility Cost Score:** {final_score}") 
+            st.write(safety_message)    
