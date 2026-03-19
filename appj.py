@@ -5,15 +5,17 @@ import matplotlib.image as mpimg
 import os
 import random
 
-# -------------------- Random maze generator --------------------
-def generate_random_maze(rows, cols):
+# -------------------- Random maze generator with landmark spacing --------------------
+def generate_random_maze(rows, cols, min_distance=5):
     """
     Create a random maze with:
     - 0 : path (approx 70%)
     - 1 : wall (approx 20%)
     - 2 : shelter (approx 5%)
     - 3 : building (approx 5%)
-    Then place landmarks A..E on random path or shelter cells.
+    Then place landmarks A..E on traversable cells, ensuring they are at least
+    `min_distance` apart (Manhattan distance). If not possible after trying,
+    fall back to random placement and show a warning.
     """
     # Define probabilities
     probs = [0] * 70 + [1] * 20 + [2] * 5 + [3] * 5   # total 100
@@ -23,19 +25,34 @@ def generate_random_maze(rows, cols):
     traversable = [(r, c) for r in range(rows) for c in range(cols)
                    if maze[r][c] not in (1, 3)]
 
-    # Place landmarks A..E on distinct traversable cells
+    # If too few traversable cells, convert some walls/buildings to path
     if len(traversable) < 5:
-        # If too few traversable cells, fill with paths
         for r in range(rows):
             for c in range(cols):
                 if maze[r][c] in (1, 3):
                     maze[r][c] = 0
         traversable = [(r, c) for r in range(rows) for c in range(cols)]
 
-    landmark_positions = random.sample(traversable, 5)
+    # Try to select 5 landmarks with minimum distance constraint
+    random.shuffle(traversable)
+    selected = []
+    for cell in traversable:
+        # Check Manhattan distance to all already selected landmarks
+        if all(abs(cell[0] - s[0]) + abs(cell[1] - s[1]) >= min_distance for s in selected):
+            selected.append(cell)
+            if len(selected) == 5:
+                break
+
+    # If we couldn't get 5, fallback to random sample (no distance) and warn
+    if len(selected) < 5:
+        st.warning(f"⚠️ Could not place 5 landmarks with minimum distance {min_distance}. "
+                   f"Placing them randomly (they may be closer).")
+        selected = random.sample(traversable, 5)
+
+    # Place the letters
     letters = ['A', 'B', 'C', 'D', 'E']
-    for (r, c), letter in zip(landmark_positions, letters):
-        maze[r][c] = letter   # replace cell content with the letter
+    for (r, c), letter in zip(selected, letters):
+        maze[r][c] = letter
 
     return maze
 
@@ -46,7 +63,7 @@ def load_maze(filename="map.txt", use_random=False, rows=10, cols=10):
     Otherwise try to load from file; if file not found, fallback to random.
     """
     if use_random:
-        st.info("🎲 Generating random maze...")
+        st.info("🎲 Generating random maze with landmarks ≥5 tiles apart...")
         return generate_random_maze(rows, cols)
 
     try:
@@ -216,7 +233,7 @@ def visualize_path(maze, path, explored=None, end=None, unreachable=False):
     return fig
 
 # -------------------- Streamlit UI --------------------
-st.title("🗺️ Random Maze Pathfinder")
+st.title("🗺️ Random Maze Pathfinder (Landmarks ≥5 apart)")
 
 # Sidebar controls
 with st.sidebar:
