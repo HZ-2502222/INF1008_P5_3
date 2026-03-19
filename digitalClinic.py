@@ -53,7 +53,7 @@ with col2:
 
 st.write("") # add spacing
 
-graph_placeholder = st.empty() # Initialize a placeholder for the graph visualisation
+graph_placeholder = st.empty() # Initialise a placeholder for the graph visualisation
 
 # Display the initial neighborhood graph without any highlighted route
 with graph_placeholder: 
