@@ -11,12 +11,12 @@ import re
 import pandas as pd
 
 # ----------------------------------------------------------------------
-# Accessibility weight function – updated penalties
+# Accessibility weight function – stairs penalty now 10
 # ----------------------------------------------------------------------
 def calculate_accessibility_weight(base_time, stairs, sheltered, high_collision_risk):
     weight = base_time
     if stairs:
-        weight += 15
+        weight += 10          # was 15, now 10
     if not sheltered:
         weight += 1
     if high_collision_risk:
@@ -24,7 +24,7 @@ def calculate_accessibility_weight(base_time, stairs, sheltered, high_collision_
     return weight
 
 # ----------------------------------------------------------------------
-# OSM‑specific helpers
+# OSM‑specific helpers (unchanged)
 # ----------------------------------------------------------------------
 def calculate_weight_from_osm_edge(u, v, key, data):
     length = data.get('length', 1)
@@ -36,7 +36,6 @@ def calculate_weight_from_osm_edge(u, v, key, data):
 
 
 def find_most_accessible_route_osm(G, start_node, dest_node):
-    """Dijkstra using accessibility weight (stairs + unsheltered + collision)."""
     distances = {node: float('inf') for node in G.nodes}
     distances[start_node] = 0
     prev = {node: None for node in G.nodes}
@@ -68,7 +67,6 @@ def find_most_accessible_route_osm(G, start_node, dest_node):
 
 
 def find_shortest_distance_route(G, start_node, dest_node):
-    """Dijkstra using edge length (meters) as weight."""
     distances = {node: float('inf') for node in G.nodes}
     distances[start_node] = 0
     prev = {node: None for node in G.nodes}
@@ -100,14 +98,6 @@ def find_shortest_distance_route(G, start_node, dest_node):
 
 
 def compute_route_stats(G, route):
-    """
-    For a given route (list of node IDs), compute:
-    - total_distance (meters)
-    - total_time (seconds) from length / 1.4
-    - accessibility_score (using stairs + unsheltered + collision penalties)
-    - hazard_penalty = accessibility_score - total_time
-    - counts: stairs, unsheltered, high_collision
-    """
     total_distance = 0.0
     total_time = 0.0
     total_score = 0.0
@@ -144,7 +134,6 @@ def compute_route_stats(G, route):
 
 
 def plot_route_on_map(G, route, map_center=None, zoom=15, draw_all_edges=False):
-    """Create a folium map showing the given route in red."""
     if map_center is None:
         lats = [G.nodes[n]['y'] for n in G.nodes]
         lons = [G.nodes[n]['x'] for n in G.nodes]
@@ -183,7 +172,6 @@ def plot_route_on_map(G, route, map_center=None, zoom=15, draw_all_edges=False):
 
 
 def analyse_osm_route_safety(route, final_score, G):
-    # Calculate pure walking time (seconds)
     pure_time = 0.0
     for i in range(len(route)-1):
         u, v = route[i], route[i+1]
@@ -193,23 +181,20 @@ def analyse_osm_route_safety(route, final_score, G):
         length = attrs.get('length', 0)
         pure_time += length / 1.4
 
-    # Penalty = sum of added weights (stairs + unsheltered + collision)
     total_penalty = final_score - pure_time
 
     if total_penalty == 0:
         return "🟢 **Very Safe:** This route is completely sheltered and avoids all stairs and high‑collision crossings."
     elif total_penalty <= 20:
-        # Allows one stair (15) or one collision (20), or up to 20 unsheltered (1 each)
         return "🟡 **Moderately Safe:** This route has minor hazards (e.g., one stair, one crossing, or several unsheltered sections)."
     elif total_penalty <= 40:
-        # Allows two stairs (30) + some, or one stair + one collision (35), etc.
         return "🟠 **Caution Required:** This route contains multiple stairs, crossings, or significant unsheltered stretches. Not ideal for those with mobility issues."
     else:
         return "🔴 **High Risk:** This route has many stairs, dangerous crossings, or long unsheltered sections. Consider an alternative if possible."
 
 
 # ----------------------------------------------------------------------
-# Fallback location dictionary
+# Fallback location dictionary (unchanged)
 # ----------------------------------------------------------------------
 KNOWN_LOCATIONS = {
     "Blk 273C Punggol Field": (1.4030, 103.9070),
@@ -453,7 +438,7 @@ def main():
             st.table(df)
 
             # ------------------------------------------------------------------
-            # LEGEND: Updated with new penalty values
+            # LEGEND: Updated with new stairs penalty (10)
             # ------------------------------------------------------------------
             with st.expander("📖 Understanding the numbers (legend)"):
                 st.markdown("""
@@ -467,7 +452,7 @@ def main():
                 - **Lower is better** (fewer hazards).
 
                 **Penalty values per edge**  
-                - Stairs: **+15**  
+                - Stairs: **+10**  
                 - Unsheltered (no cover, no tunnel): **+1**  
                 - High‑collision crossing (marked/unmarked): **+20**  
 
