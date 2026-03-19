@@ -27,60 +27,45 @@ def calculate_weight_from_osm_edge(u, v, key, data):
     # Call your original function with these derived values
     return calculate_accessibility_weight(base_time, stairs, sheltered, high_collision_risk)
 
-def find_most_accessible_route(graph, start, destination):
-    """Implements Dijkstra's algorithm with a priority queue to find the most accessible route."""
-    # Store the lowest composite "weight" to each node
-    lowest_weights = {node: float('infinity') for node in graph}
-    lowest_weights[start] = 0
+def find_most_accessible_route_osm(G, start_node, dest_node):
+    # G is a networkx.MultiDiGraph
+    lowest_weights = {node: float('inf') for node in G.nodes}
+    lowest_weights[start_node] = 0
+    pq = [(0, start_node)]
+    prev = {node: None for node in G.nodes}
     
-    # Priority queue to explore nodes based on lowest weight
-    priority_queue = [(0, start)]
-    previous_nodes = {node: None for node in graph}
-    
-    while priority_queue:
-        # Get the node with the lowest weight from the priority queue
-        current_weight, current_node = heapq.heappop(priority_queue) 
-       
-        # Check if we have already found a better path to this node
-        if current_node is None:
-            break
-        
-        # Check if we have reached the destination
-        if current_node == destination:
-            break
-        
-        # Check if we have already found a better path to this node
-        if current_weight > lowest_weights[current_node]:
+    while pq:
+        current_weight, current = heapq.heappop(pq)
+        if current_weight > lowest_weights[current]:
             continue
+        if current == dest_node:
+            break
             
-        # Unpack the complex edge data for neighbours
-        for neighbour, attributes in graph[current_node].items():
+        # Iterate over outgoing edges
+        for neighbor, edge_data in G[current].items():
+            # In a MultiDiGraph, there can be multiple edges between same nodes.
+            # We'll take the first one, or you could choose the best.
+            # For simplicity, take the first key.
+            first_key = next(iter(edge_data))
+            attrs = edge_data[first_key]
             
-            # Calculate the custom weight for this specific path
-            path_penalty = calculate_accessibility_weight(
-                base_time=attributes['time'],
-                stairs=attributes['stairs'],
-                sheltered=attributes['sheltered'],
-                high_collision_risk=attributes['high_collision_risk']
-            )
+            # Calculate weight using the new helper
+            weight = calculate_weight_from_osm_edge(current, neighbor, first_key, attrs)
+            new_weight = current_weight + weight
             
-            new_total_weight = current_weight + path_penalty # Calculate the new total weight to reach the neighbour
-            
-            # Check if we found a better path to the neighbour
-            if new_total_weight < lowest_weights[neighbour]:
-                lowest_weights[neighbour] = new_total_weight
-                previous_nodes[neighbour] = current_node
-                heapq.heappush(priority_queue, (new_total_weight, neighbour)) # Add the neighbour to the priority queue with its new total weight
-                
-    # Reconstruct the optimal path
-    path = []
-    current = destination
-    while current is not None:
-        path.append(current)
-        current = previous_nodes[current]
-    path.reverse()
+            if new_weight < lowest_weights[neighbor]:
+                lowest_weights[neighbor] = new_weight
+                prev[neighbor] = current
+                heapq.heappush(pq, (new_weight, neighbor))
     
-    return path, lowest_weights[destination]
+    # Reconstruct path using prev dict
+    path = []
+    node = dest_node
+    while node is not None:
+        path.append(node)
+        node = prev[node]
+    path.reverse()
+    return path, lowest_weights[dest_node]
 
 
 def find_most_accessible_route_no_pq(graph, start, destination):
