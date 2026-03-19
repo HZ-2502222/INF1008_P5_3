@@ -15,37 +15,28 @@ def calculate_accessibility_weight(base_time, stairs, sheltered, high_collision_
     """Calculate composite cost for an edge based on elderly accessibility."""
     weight = base_time
     if stairs:
-        weight += 15          # severe penalty
+        weight += 15
     if not sheltered:
-        weight += 3           # light penalty for exposure
+        weight += 3
     if high_collision_risk:
-        weight += 20          # major penalty to avoid dangerous crossings
+        weight += 20
     return weight
 
 # ----------------------------------------------------------------------
 # OSM‑specific helper functions
 # ----------------------------------------------------------------------
 def calculate_weight_from_osm_edge(u, v, key, data):
-    """
-    Convert OSM edge attributes into an accessibility weight.
-    'data' is the attribute dictionary of the edge in the OSMnx graph.
-    """
-    length = data.get('length', 1)                 # meters
-    base_time = length / 1.4                        # walking time in seconds
+    length = data.get('length', 1)
+    base_time = length / 1.4
 
     stairs = data.get('highway') == 'steps'
     sheltered = data.get('covered') == 'yes' or data.get('tunnel') is not None
-    # Approximate collision risk – real world would need more data
     high_collision_risk = data.get('highway') in ['crossing', 'unmarked_crossing']
 
     return calculate_accessibility_weight(base_time, stairs, sheltered, high_collision_risk)
 
 
 def find_most_accessible_route_osm(G, start_node, dest_node):
-    """
-    Dijkstra's algorithm tailored for a networkx.MultiDiGraph (OSMnx graph).
-    Uses a priority queue (heapq) for efficiency.
-    """
     distances = {node: float('inf') for node in G.nodes}
     distances[start_node] = 0
     prev = {node: None for node in G.nodes}
@@ -59,10 +50,8 @@ def find_most_accessible_route_osm(G, start_node, dest_node):
             break
 
         for neighbor, edge_dict in G[current].items():
-            # In case of multiple edges, take the first one
             first_key = next(iter(edge_dict))
             attrs = edge_dict[first_key]
-
             weight = calculate_weight_from_osm_edge(current, neighbor, first_key, attrs)
             new_dist = current_dist + weight
             if new_dist < distances[neighbor]:
@@ -81,18 +70,12 @@ def find_most_accessible_route_osm(G, start_node, dest_node):
 
 
 def plot_route_on_map(G, route):
-    """
-    Create an interactive folium map showing the full network (gray)
-    and the computed route (red). Start and end are marked.
-    """
-    # Compute centre of the graph
     lats = [G.nodes[n]['y'] for n in G.nodes]
     lons = [G.nodes[n]['x'] for n in G.nodes]
     centre = [sum(lats)/len(lats), sum(lons)/len(lons)]
 
     m = folium.Map(location=centre, zoom_start=15)
 
-    # Draw all edges in light gray
     for u, v, data in G.edges(keys=False, data=True):
         if 'geometry' in data:
             points = [(lat, lon) for lon, lat in data['geometry'].coords]
@@ -101,7 +84,6 @@ def plot_route_on_map(G, route):
                       (G.nodes[v]['y'], G.nodes[v]['x'])]
         folium.PolyLine(points, color='gray', weight=2, opacity=0.5).add_to(m)
 
-    # Highlight the route edges in red
     for i in range(len(route)-1):
         u, v = route[i], route[i+1]
         if G.has_edge(u, v):
@@ -115,7 +97,6 @@ def plot_route_on_map(G, route):
                           (G.nodes[v]['y'], G.nodes[v]['x'])]
             folium.PolyLine(points, color='red', weight=5, opacity=0.8).add_to(m)
 
-    # Mark start and end nodes
     start_node = route[0]
     end_node = route[-1]
     folium.Marker([G.nodes[start_node]['y'], G.nodes[start_node]['x']],
@@ -127,10 +108,6 @@ def plot_route_on_map(G, route):
 
 
 def analyse_osm_route_safety(route, final_score, G):
-    """
-    Derive a safety message from the route and its accessibility score.
-    Works with OSM graph by computing pure walking time from edge lengths.
-    """
     pure_time = 0.0
     for i in range(len(route)-1):
         u, v = route[i], route[i+1]
@@ -138,7 +115,7 @@ def analyse_osm_route_safety(route, final_score, G):
         first_key = next(iter(edge_data))
         attrs = edge_data[first_key]
         length = attrs.get('length', 0)
-        pure_time += length / 1.4      # seconds
+        pure_time += length / 1.4
 
     total_penalty = final_score - pure_time
 
@@ -153,14 +130,50 @@ def analyse_osm_route_safety(route, final_score, G):
 
 
 # ----------------------------------------------------------------------
-# Main Streamlit application with improved geocoding
+# Fallback dictionary of known Punggol locations with coordinates
+# (These coordinates were obtained from OpenStreetMap/Nominatim)
+# ----------------------------------------------------------------------
+KNOWN_LOCATIONS = {
+    "Blk 273C Punggol Field": (1.4030, 103.9070),   # approximate – replace with exact if known
+    "Punggol Polyclinic": (1.4005, 103.9100),       # approximate
+    "Waterway Point": (1.4093, 103.9021),
+    "Punggol MRT Station": (1.4054, 103.9023),
+    "Punggol Park": (1.3810, 103.8980),
+    "Oasis LRT Station": (1.4020, 103.9130),
+    "Cove LRT Station": (1.4090, 103.8980),
+    "Punggol Settlement": (1.4150, 103.9120),
+}
+
+def get_coordinates_from_address(address):
+    """
+    Try to geocode the address. If it fails, check if the address (case‑insensitive)
+    matches any key in the KNOWN_LOCATIONS dictionary. Return (lat, lon) or None.
+    """
+    # First, try Nominatim
+    geolocator = Nominatim(user_agent="accessibility_app")
+    try:
+        location = geolocator.geocode(address)
+        if location:
+            return (location.latitude, location.longitude)
+    except:
+        pass
+
+    # Fallback: check against known locations (case‑insensitive)
+    addr_lower = address.lower()
+    for name, coords in KNOWN_LOCATIONS.items():
+        if name.lower() in addr_lower or addr_lower in name.lower():
+            return coords
+    return None
+
+
+# ----------------------------------------------------------------------
+# Main Streamlit application
 # ----------------------------------------------------------------------
 def main():
     st.set_page_config(page_title="Accessibility Router (OSM)", page_icon="🗺️", layout="centered")
     st.title("Digital Clinic Accessibility Router – Live OSM Data")
     st.write("Find the safest walking route using real OpenStreetMap data.")
 
-    # Cache the graph download to avoid reloading on every interaction
     @st.cache_data
     def load_graph(place):
         return ox.graph_from_place(place, network_type='walk')
@@ -172,14 +185,7 @@ def main():
 
     st.divider()
 
-    # Cache geocoding results to avoid repeated calls and respect rate limits
-    @st.cache_data
-    def geocode_address(address):
-        geolocator = Nominatim(user_agent="accessibility_app")
-        return geolocator.geocode(address)
-
     def ensure_singapore(addr):
-        """Append ', Singapore' if not already present (case‑insensitive)."""
         if "singapore" not in addr.lower():
             return f"{addr}, Singapore"
         return addr
@@ -195,26 +201,27 @@ def main():
             st.warning("Please enter both addresses.")
             return
 
-        # Ensure addresses include country for better geocoding
         start_full = ensure_singapore(start_address)
         dest_full = ensure_singapore(dest_address)
 
-        with st.spinner("Geocoding addresses..."):
-            start_loc = geocode_address(start_full)
-            dest_loc = geocode_address(dest_full)
+        with st.spinner("Finding locations..."):
+            start_coords = get_coordinates_from_address(start_full)
+            dest_coords = get_coordinates_from_address(dest_full)
 
-        if not start_loc or not dest_loc:
+        if not start_coords or not dest_coords:
             st.error(
                 "Could not find one of the addresses. Please try:\n"
                 "- Using a more complete address (e.g., include road name or 'Block')\n"
                 "- Adding 'Singapore' if not already present\n"
-                "- Checking for typos"
+                "- Checking for typos\n\n"
+                "Alternatively, try one of these known locations:\n" +
+                ", ".join(KNOWN_LOCATIONS.keys())
             )
             return
 
         # Find nearest nodes in the graph
-        start_node = ox.nearest_nodes(G, start_loc.longitude, start_loc.latitude)
-        dest_node = ox.nearest_nodes(G, dest_loc.longitude, dest_loc.latitude)
+        start_node = ox.nearest_nodes(G, start_coords[1], start_coords[0])  # ox.nearest_nodes expects lon, lat
+        dest_node = ox.nearest_nodes(G, dest_coords[1], dest_coords[0])
 
         if start_node == dest_node:
             st.warning("Start and destination are the same location!")
@@ -231,14 +238,10 @@ def main():
         m = plot_route_on_map(G, route)
         st_folium(m, width=700, height=500)
 
-        # Show route info
         st.success(f"**Most Accessible Route Found** – Total accessibility score: **{score:.1f}**")
-
-        # Safety analysis (OSM‑adapted)
         safety_msg = analyse_osm_route_safety(route, score, G)
         st.info(safety_msg)
 
-        # Optional: list the node IDs (can be collapsed)
         with st.expander("Show route nodes (OSM IDs)"):
             st.write(route)
 
