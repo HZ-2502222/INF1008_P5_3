@@ -224,7 +224,7 @@ def get_coordinates_from_address(address):
 
 
 # ----------------------------------------------------------------------
-# Main Streamlit application with session state
+# Main Streamlit application with session state (map rebuilt on each rerun)
 # ----------------------------------------------------------------------
 def main():
     st.set_page_config(page_title="Accessibility Router (OSM)", page_icon="🗺️", layout="centered")
@@ -257,7 +257,6 @@ def main():
     if "route" not in st.session_state:
         st.session_state.route = None
         st.session_state.score = None
-        st.session_state.map = None
         st.session_state.last_start = ""
         st.session_state.last_dest = ""
 
@@ -266,7 +265,6 @@ def main():
         dest_address != st.session_state.last_dest):
         st.session_state.route = None
         st.session_state.score = None
-        st.session_state.map = None
 
     if st.button("Find Safest Route", type="primary"):
         if not start_address or not dest_address:
@@ -309,16 +307,17 @@ def main():
                         st.error("No route found between these locations.")
                         st.session_state.route = None
                     else:
-                        # Store results in session state
+                        # Store only the route and score, not the map object
                         st.session_state.route = route
                         st.session_state.score = score
-                        st.session_state.map = plot_route_on_map(G, route)
                         st.session_state.last_start = start_address
                         st.session_state.last_dest = dest_address
 
-    # Display the map if it exists in session state
+    # Display the map if a route exists – rebuild map each time
     if st.session_state.route is not None:
-        st_folium(st.session_state.map, width=700, height=500)
+        # Rebuild the map from the stored route and the graph
+        m = plot_route_on_map(G, st.session_state.route)
+        st_folium(m, width=700, height=500, key="map_display")
         st.success(f"**Most Accessible Route Found** – Total accessibility score: **{st.session_state.score:.1f}**")
         safety_msg = analyse_osm_route_safety(st.session_state.route, st.session_state.score, G)
         st.info(safety_msg)
