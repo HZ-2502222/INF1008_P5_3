@@ -37,9 +37,12 @@ To run the accessibility router, follow these steps:
 
   3. Ensure you have Python 3.x installed on your machine. 
 
-  4. No external libraries are required for the core algorithm.
+  4. Libraries needed to run the application:
+     - networkx
+     - matplotlib
+     - streamlit
 
-  4. Run the main file to execute the routing script.
+  5. Run the main file to execute the routing script.
 
 **Usage**
 
@@ -53,3 +56,5 @@ It will output:
   - The calculated optimal route dynamically avoids heavy penalties, such as stairs and unsheltered high-risk crossings.
 
   - The final composite "Accessibility Cost Score."
+
+  - Safety ratings (Very Safe, Moderately Safe, Caution Required, High Risk)  of the calculated route and respective reasons.
