@@ -397,5 +397,7 @@ def main():
                 st.write("Shortest route nodes:", st.session_state.shortest_route)
     else:
         st.info("👆 Enter an area and click 'Load Area' to begin.")
-
+        
+if __name__ == "__main__":
+    main()
 # streamlit run app.py
