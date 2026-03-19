@@ -218,65 +218,78 @@ def main():
 
     col1, col2 = st.columns(2)
     with col1:
-        start_address = st.text_input("Start address (e.g., 'Blk 273C Punggol')")
+        start_address = st.text_input("Start address (e.g., 'Blk 273C Punggol')", key="start_input")
     with col2:
-        dest_address = st.text_input("Destination address (e.g., 'Punggol Polyclinic')")
+        dest_address = st.text_input("Destination address (e.g., 'Punggol Polyclinic')", key="dest_input")
+
+    # Initialize session state variables if they don't exist
+    if "route" not in st.session_state:
+        st.session_state.route = None
+        st.session_state.score = None
+        st.session_state.map = None
+        st.session_state.last_start = ""
+        st.session_state.last_dest = ""
+
+    # Clear previous results if addresses have changed
+    if (start_address != st.session_state.last_start or 
+        dest_address != st.session_state.last_dest):
+        st.session_state.route = None
+        st.session_state.score = None
+        st.session_state.map = None
 
     if st.button("Find Safest Route", type="primary"):
         if not start_address or not dest_address:
             st.warning("Please enter both addresses.")
-            return
+            st.session_state.route = None
+        else:
+            start_full = ensure_singapore(start_address)
+            dest_full = ensure_singapore(dest_address)
 
-        start_full = ensure_singapore(start_address)
-        dest_full = ensure_singapore(dest_address)
+            with st.spinner("Finding locations..."):
+                start_coords = get_coordinates_from_address(start_full)
+                dest_coords = get_coordinates_from_address(dest_full)
 
-        with st.spinner("Finding locations..."):
-            start_coords = get_coordinates_from_address(start_full)
-            dest_coords = get_coordinates_from_address(dest_full)
+            if not start_coords or not dest_coords:
+                known_list = "\n".join([f"- {name}" for name in KNOWN_LOCATIONS.keys()])
+                st.error(
+                    "Could not find one of the addresses. Please try:\n"
+                    "- Using a more complete address (e.g., include road name or 'Block')\n"
+                    "- Adding 'Singapore' if not already present\n"
+                    "- Checking for typos\n\n"
+                    "Alternatively, try one of these known locations:\n" + known_list
+                )
+                st.session_state.route = None
+            else:
+                start_node = ox.nearest_nodes(G, start_coords[1], start_coords[0])
+                dest_node = ox.nearest_nodes(G, dest_coords[1], dest_coords[0])
 
-        if not start_coords or not dest_coords:
-            known_list = "\n".join([f"- {name}" for name in KNOWN_LOCATIONS.keys()])
-            st.error(
-                "Could not find one of the addresses. Please try:\n"
-                "- Using a more complete address (e.g., include road name or 'Block')\n"
-                "- Adding 'Singapore' if not already present\n"
-                "- Checking for typos\n\n"
-                "Alternatively, try one of these known locations:\n" + known_list
-            )
-            return
+                if start_node == dest_node:
+                    st.warning("Start and destination are the same location!")
+                    st.session_state.route = None
+                else:
+                    route, score = find_most_accessible_route_osm(G, start_node, dest_node)
 
-        start_node = ox.nearest_nodes(G, start_coords[1], start_coords[0])
-        dest_node = ox.nearest_nodes(G, dest_coords[1], dest_coords[0])
+                    if score == float('inf'):
+                        st.error("No route found between these locations.")
+                        st.session_state.route = None
+                    else:
+                        # Store results in session state
+                        st.session_state.route = route
+                        st.session_state.score = score
+                        st.session_state.map = plot_route_on_map(G, route)
+                        st.session_state.last_start = start_address
+                        st.session_state.last_dest = dest_address
 
-        if start_node == dest_node:
-            st.warning("Start and destination are the same location!")
-            return
-
-        route, score = find_most_accessible_route_osm(G, start_node, dest_node)
-
-        if score == float('inf'):
-            st.error("No route found between these locations.")
-            return
-
-        m = plot_route_on_map(G, route)
-        st_folium(m, width=700, height=500)
-
-        st.success(f"**Most Accessible Route Found** – Total accessibility score: **{score:.1f}**")
-        safety_msg = analyse_osm_route_safety(route, score, G)
+    # Display the map if it exists in session state
+    if st.session_state.route is not None:
+        st_folium(st.session_state.map, width=700, height=500)
+        st.success(f"**Most Accessible Route Found** – Total accessibility score: **{st.session_state.score:.1f}**")
+        safety_msg = analyse_osm_route_safety(st.session_state.route, st.session_state.score, G)
         st.info(safety_msg)
 
         with st.expander("Show route nodes (OSM IDs)"):
-            st.write(route)
-            
-from geopy.geocoders import Nominatim
-geolocator = Nominatim(user_agent="test")
-addr = "Block 273C Punggol Field, Singapore"
-loc = geolocator.geocode(addr)
-print("Nominatim:", loc)
+            st.write(st.session_state.route)
 
-# Test fallback manually
-from your_app import get_coordinates_from_address  # after pasting the function
-print("Fallback:", get_coordinates_from_address(addr))
 
 if __name__ == "__main__":
     main()
