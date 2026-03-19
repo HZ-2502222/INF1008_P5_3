@@ -1,6 +1,11 @@
-import networkx as nx # For creating and manipulating graphs
-import matplotlib.pyplot as plt # For visualising the neighborhood graph
-import heapq # For priority queue
+import streamlit as st
+import osmnx as ox              # new
+import networkx as nx
+import folium                   # new (for interactive map)
+from streamlit_folium import st_folium  # new
+import heapq
+from functions import calculate_accessibility_weight, find_most_accessible_route_no_pq, analyse_route_safety
+# draw_neighbourhood_graph will be replaced
 
 def calculate_accessibility_weight(base_time, stairs, sheltered, high_collision_risk):
     """Calculates the composite cost of a path based on elderly accessibility."""
