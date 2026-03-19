@@ -6,33 +6,17 @@ from streamlit.web import cli as stcli
 
 from functions import calculate_accessibility_weight, find_most_accessible_route_no_pq, draw_neighbourhood_graph, analyse_route_safety
 
-# Graph representation of the neighborhood with accessibility attributes
-punggol_graph = {
-    'Blk 273C': {
-        'Waterway Point': {'time': 5, 'stairs': False, 'sheltered': True, 'high_collision_risk': False},
-        'Pedestrian Crossing A': {'time': 2, 'stairs': False, 'sheltered': False, 'high_collision_risk': True} 
-    },
-    'Pedestrian Crossing A': {
-        'Blk 273C': {'time': 2, 'stairs': False, 'sheltered': False, 'high_collision_risk': True},
-        'Digital Clinic': {'time': 3, 'stairs': False, 'sheltered': True, 'high_collision_risk': False}
-    },
-    'Waterway Point': {
-        'Blk 273C': {'time': 5, 'stairs': False, 'sheltered': True, 'high_collision_risk': False},
-        'Overhead Bridge': {'time': 4, 'stairs': True, 'sheltered': True, 'high_collision_risk': False},
-        'Digital Clinic': {'time': 8, 'stairs': False, 'sheltered': True, 'high_collision_risk': False}
-    },
-    'Overhead Bridge': {
-        'Waterway Point': {'time': 4, 'stairs': True, 'sheltered': True, 'high_collision_risk': False},
-        'Digital Clinic': {'time': 2, 'stairs': True, 'sheltered': True, 'high_collision_risk': False}
-    },
-    'Digital Clinic': {
-        'Pedestrian Crossing A': {'time': 3, 'stairs': False, 'sheltered': True, 'high_collision_risk': False},
-        'Waterway Point': {'time': 8, 'stairs': False, 'sheltered': True, 'high_collision_risk': False},
-        'Overhead Bridge': {'time': 2, 'stairs': True, 'sheltered': True, 'high_collision_risk': False}
-    }
-}
+# Define the place (you can make this a user input later)
+place_name = "Punggol, Singapore"
 
+# Download the walkable network (streets, paths, etc.)
+G = ox.graph_from_place(place_name, network_type='walk')
 
+# Optional: project to a local coordinate system for accurate distance calculations
+G_projected = ox.project_graph(G)
+
+# Now G is a networkx.MultiDiGraph containing real nodes and edges.
+# We'll use this graph throughout the app.
             
 #Streamlit App
 def main():
