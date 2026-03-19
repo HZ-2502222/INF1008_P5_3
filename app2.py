@@ -118,18 +118,19 @@ def compute_route_stats(G, route):
         length = attrs.get('length', 0)
         total_distance += length
         total_time += length / 1.4
-        # compute accessibility weight for this edge
         weight = calculate_weight_from_osm_edge(u, v, first_key, attrs)
         total_score += weight
     hazard_penalty = total_score - total_time
     return total_distance, total_time, total_score, hazard_penalty
 
 
-def plot_route_on_map(G, route, draw_all_edges=False):
-    lats = [G.nodes[n]['y'] for n in G.nodes]
-    lons = [G.nodes[n]['x'] for n in G.nodes]
-    centre = [sum(lats)/len(lats), sum(lons)/len(lons)]
-    m = folium.Map(location=centre, zoom_start=15)
+def plot_route_on_map(G, route, map_center=None, zoom=15, draw_all_edges=False):
+    """Create a folium map showing the given route in red."""
+    if map_center is None:
+        lats = [G.nodes[n]['y'] for n in G.nodes]
+        lons = [G.nodes[n]['x'] for n in G.nodes]
+        map_center = [sum(lats)/len(lats), sum(lons)/len(lons)]
+    m = folium.Map(location=map_center, zoom_start=zoom)
 
     if draw_all_edges:
         for u, v, data in G.edges(keys=False, data=True):
@@ -163,7 +164,7 @@ def plot_route_on_map(G, route, draw_all_edges=False):
 
 
 def analyse_osm_route_safety(route, final_score, G):
-    # This is now replaced by compute_route_stats, but kept for backward compatibility
+    # Kept for backward compatibility, but stats are now computed elsewhere.
     pure_time = 0.0
     for i in range(len(route)-1):
         u, v = route[i], route[i+1]
@@ -242,8 +243,8 @@ def get_coordinates_from_address(address):
 # Main app – user chooses area first
 # ----------------------------------------------------------------------
 def main():
-    st.set_page_config(page_title="Accessibility Router (OSM)", page_icon="🗺️", layout="centered")
-    st.title("Digital Clinic Accessibility Router – Prove It's the Safest")
+    st.set_page_config(page_title="Accessibility Router (OSM)", page_icon="🗺️", layout="wide")
+    st.title("Digital Clinic Accessibility Router – Compare Safest vs. Shortest")
     st.write("First, enter the area (neighbourhood or town in Singapore) you want to explore, then load the walking network.")
 
     # --- Step 1: Area selection ---
@@ -300,7 +301,7 @@ def main():
             st.session_state.shortest_route = None
             st.session_state.shortest_distance = None
 
-        if st.button("Find Safest Route", type="secondary"):
+        if st.button("Find Routes", type="secondary"):
             if not start_address or not dest_address:
                 st.warning("Please enter both addresses.")
                 st.session_state.safest_route = None
@@ -349,28 +350,53 @@ def main():
                             st.session_state.last_start = start_address
                             st.session_state.last_dest = dest_address
 
-        # Display comparison if both routes exist
+        # Display both maps side by side if routes exist
         if st.session_state.safest_route is not None:
             # Compute stats for both routes
             dist_safe, time_safe, score_safe, penalty_safe = compute_route_stats(G, st.session_state.safest_route)
             dist_short, time_short, score_short, penalty_short = compute_route_stats(G, st.session_state.shortest_route)
 
-            # Show map of safest route (or you could let the user choose)
-            st.subheader("Map of Safest Route (red)")
-            m = plot_route_on_map(G, st.session_state.safest_route, draw_all_edges=False)
-            st_folium(m, width=700, height=500, key="map_display")
+            # Determine a common map center (using the graph's center)
+            lats = [G.nodes[n]['y'] for n in G.nodes]
+            lons = [G.nodes[n]['x'] for n in G.nodes]
+            map_center = [sum(lats)/len(lats), sum(lons)/len(lons)]
+
+            # Create two columns
+            col_left, col_right = st.columns(2)
+
+            with col_left:
+                st.subheader("🗺️ Safest Route (Accessibility‑Weighted)")
+                m_safe = plot_route_on_map(G, st.session_state.safest_route, map_center=map_center, draw_all_edges=False)
+                st_folium(m_safe, width=500, height=400, key="map_safe")
+                st.markdown(f"""
+                **Distance:** {dist_safe:.0f} m  
+                **Walking time:** {time_safe/60:.1f} min  
+                **Accessibility score:** {score_safe:.1f}  
+                **Hazard penalty:** {penalty_safe:.1f}  
+                """)
+
+            with col_right:
+                st.subheader("🗺️ Shortest Route (By Distance)")
+                m_short = plot_route_on_map(G, st.session_state.shortest_route, map_center=map_center, draw_all_edges=False)
+                st_folium(m_short, width=500, height=400, key="map_short")
+                st.markdown(f"""
+                **Distance:** {dist_short:.0f} m  
+                **Walking time:** {time_short/60:.1f} min  
+                **Accessibility score:** {score_short:.1f}  
+                **Hazard penalty:** {penalty_short:.1f}  
+                """)
 
             # Comparison table
-            st.subheader("Route Comparison")
+            st.subheader("📊 Route Comparison")
             comparison_data = {
                 "Metric": ["Total Distance (m)", "Walking Time (min)", "Accessibility Score", "Hazard Penalty"],
-                "Safest Route (weighted)": [
+                "Safest Route": [
                     f"{dist_safe:.0f}",
                     f"{time_safe/60:.1f}",
                     f"{score_safe:.1f}",
                     f"{penalty_safe:.1f}"
                 ],
-                "Shortest Route (by distance)": [
+                "Shortest Route": [
                     f"{dist_short:.0f}",
                     f"{time_short/60:.1f}",
                     f"{score_short:.1f}",
@@ -383,21 +409,22 @@ def main():
             # Explanation
             st.markdown("""
             **Why this proves optimality:**  
-            - The **Safest Route** has a **lower accessibility score** (remember: lower is better) than the Shortest Route, meaning it avoids stairs, unsheltered sections, and high‑collision crossings.  
+            - The **Safest Route** has a **lower accessibility score** (lower is better) than the Shortest Route, meaning it avoids stairs, unsheltered sections, and high‑collision crossings.  
             - The **Hazard Penalty** (accessibility score minus pure walking time) is smaller for the Safest Route, confirming it incurs fewer penalties.  
             - Dijkstra's algorithm guarantees that, given the edge weights we defined, this path is the absolute minimum among all possible paths.  
             """)
 
-            # Safety message (optional)
+            # Optional safety message for the safest route
             safety_msg = analyse_osm_route_safety(st.session_state.safest_route, st.session_state.safest_score, G)
             st.info(safety_msg)
 
             with st.expander("Show route nodes (OSM IDs)"):
-                st.write("Safest route nodes:", st.session_state.safest_route)
-                st.write("Shortest route nodes:", st.session_state.shortest_route)
+                st.write("**Safest route nodes:**", st.session_state.safest_route)
+                st.write("**Shortest route nodes:**", st.session_state.shortest_route)
     else:
         st.info("👆 Enter an area and click 'Load Area' to begin.")
-        
+
+
 if __name__ == "__main__":
     main()
 # streamlit run app.py
