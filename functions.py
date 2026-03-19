@@ -131,35 +131,49 @@ def find_most_accessible_route_no_pq(graph, start, destination):
     return path, lowest_weights[destination]
 
 
-def draw_neighbourhood_graph(graph_data, highlighted_route=None):
-    ''' Draws the neighbourhood graph with optional highlighted route.'''
+def plot_route_on_map(G, route):
+    # Get the center of the graph for the map
+    center_lat = sum([G.nodes[n]['y'] for n in G.nodes]) / len(G.nodes)
+    center_lon = sum([G.nodes[n]['x'] for n in G.nodes]) / len(G.nodes)
+    m = folium.Map(location=[center_lat, center_lon], zoom_start=15)
     
-    G = nx.DiGraph() # Create an empty graph object
+    # Add all edges as gray lines (the full network)
+    for u, v, data in G.edges(keys=False, data=True):
+        # Get node coordinates
+        if 'geometry' in data:
+            # If edge has geometry (list of points), use it
+            points = [(lat, lon) for lon, lat in data['geometry'].coords]
+        else:
+            # Otherwise just use the two nodes
+            points = [(G.nodes[u]['y'], G.nodes[u]['x']),
+                      (G.nodes[v]['y'], G.nodes[v]['x'])]
+        folium.PolyLine(points, color='gray', weight=2, opacity=0.5).add_to(m)
     
-    # Add edges to the graph based on the provided graph data
-    for node, neighbours in graph_data.items():
-        for neighbour in neighbours.keys():
-            G.add_edge(node, neighbour)
-            
-    fig, ax = plt.subplots(figsize=(8, 5))
+    # Highlight the route edges in red
+    for i in range(len(route)-1):
+        u = route[i]
+        v = route[i+1]
+        # Find the edge(s) between u and v – take the first
+        if G.has_edge(u, v):
+            data = G.get_edge_data(u, v)
+            first_key = next(iter(data))
+            edge_data = data[first_key]
+            if 'geometry' in edge_data:
+                points = [(lat, lon) for lon, lat in edge_data['geometry'].coords]
+            else:
+                points = [(G.nodes[u]['y'], G.nodes[u]['x']),
+                          (G.nodes[v]['y'], G.nodes[v]['x'])]
+            folium.PolyLine(points, color='red', weight=5, opacity=0.8).add_to(m)
     
-    # Use a consistent layout for better readability
-    pos = nx.spring_layout(G, seed = 42)
-    nx.draw_networkx_nodes(G, pos, node_color='lightblue', node_size=2500, ax = ax) # Draw nodes first to ensure they are on top of edges
-    nx.draw_networkx_edges(G, pos, edge_color='gray', width=2, ax = ax) # Draw edges before nodes for better aesthetics
+    # Mark start and end nodes
+    start = route[0]
+    end = route[-1]
+    folium.Marker([G.nodes[start]['y'], G.nodes[start]['x']],
+                  popup='Start', icon=folium.Icon(color='green')).add_to(m)
+    folium.Marker([G.nodes[end]['y'], G.nodes[end]['x']],
+                  popup='Destination', icon=folium.Icon(color='red')).add_to(m)
     
-    # Highlight the route if provided
-    if highlighted_route and len(highlighted_route) > 1:
-        path_edges = list(zip(highlighted_route, highlighted_route[1:]))
-        
-        nx.draw_networkx_edges(G, pos, edgelist=path_edges, edge_color='red', width=5, ax = ax)
-        nx.draw_networkx_nodes(G, pos, nodelist=highlighted_route, node_color='red', node_size=2500, ax = ax)
-        
-    # Draw labels on top of everything else for better visibility
-    nx.draw_networkx_labels(G, pos, font_size=9, font_weight="bold", font_family='sans-serif', ax = ax)
-    
-    plt.axis('off') ## Hide axes for better aesthetics
-    return fig
+    return m
 
 
 def analyse_route_safety(route, final_score, graph):
