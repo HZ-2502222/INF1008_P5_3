@@ -1,4 +1,4 @@
-# pip install streamlit osmnx networkx folium streamlit-folium geopy
+# pip install streamlit osmnx networkx folium streamlit-folium geopy scikit-learn
 
 import streamlit as st
 import osmnx as ox
@@ -10,9 +10,10 @@ import heapq
 import re
 
 # ----------------------------------------------------------------------
-# Original accessibility weight function
+# Original accessibility weight function (reused from your assignment)
 # ----------------------------------------------------------------------
 def calculate_accessibility_weight(base_time, stairs, sheltered, high_collision_risk):
+    """Calculate composite cost for an edge based on elderly accessibility."""
     weight = base_time
     if stairs:
         weight += 15
@@ -23,18 +24,28 @@ def calculate_accessibility_weight(base_time, stairs, sheltered, high_collision_
     return weight
 
 # ----------------------------------------------------------------------
-# OSM‑specific helpers
+# OSM‑specific helper functions
 # ----------------------------------------------------------------------
 def calculate_weight_from_osm_edge(u, v, key, data):
-    length = data.get('length', 1)
-    base_time = length / 1.4
+    """
+    Convert OSM edge attributes into an accessibility weight.
+    'data' is the attribute dictionary of the edge in the OSMnx graph.
+    """
+    length = data.get('length', 1)                 # meters
+    base_time = length / 1.4                        # walking time in seconds
+
     stairs = data.get('highway') == 'steps'
     sheltered = data.get('covered') == 'yes' or data.get('tunnel') is not None
     high_collision_risk = data.get('highway') in ['crossing', 'unmarked_crossing']
+
     return calculate_accessibility_weight(base_time, stairs, sheltered, high_collision_risk)
 
 
 def find_most_accessible_route_osm(G, start_node, dest_node):
+    """
+    Dijkstra's algorithm tailored for a networkx.MultiDiGraph (OSMnx graph).
+    Uses a priority queue (heapq) for efficiency.
+    """
     distances = {node: float('inf') for node in G.nodes}
     distances[start_node] = 0
     prev = {node: None for node in G.nodes}
@@ -46,9 +57,12 @@ def find_most_accessible_route_osm(G, start_node, dest_node):
             continue
         if current == dest_node:
             break
+
         for neighbor, edge_dict in G[current].items():
+            # In case of multiple edges, take the first one
             first_key = next(iter(edge_dict))
             attrs = edge_dict[first_key]
+
             weight = calculate_weight_from_osm_edge(current, neighbor, first_key, attrs)
             new_dist = current_dist + weight
             if new_dist < distances[neighbor]:
@@ -56,6 +70,7 @@ def find_most_accessible_route_osm(G, start_node, dest_node):
                 prev[neighbor] = current
                 heapq.heappush(pq, (new_dist, neighbor))
 
+    # Reconstruct path
     path = []
     node = dest_node
     while node is not None:
@@ -66,11 +81,18 @@ def find_most_accessible_route_osm(G, start_node, dest_node):
 
 
 def plot_route_on_map(G, route):
+    """
+    Create an interactive folium map showing the full network (gray)
+    and the computed route (red). Start and end are marked.
+    """
+    # Compute centre of the graph
     lats = [G.nodes[n]['y'] for n in G.nodes]
     lons = [G.nodes[n]['x'] for n in G.nodes]
     centre = [sum(lats)/len(lats), sum(lons)/len(lons)]
+
     m = folium.Map(location=centre, zoom_start=15)
 
+    # Draw all edges in light gray
     for u, v, data in G.edges(keys=False, data=True):
         if 'geometry' in data:
             points = [(lat, lon) for lon, lat in data['geometry'].coords]
@@ -79,6 +101,7 @@ def plot_route_on_map(G, route):
                       (G.nodes[v]['y'], G.nodes[v]['x'])]
         folium.PolyLine(points, color='gray', weight=2, opacity=0.5).add_to(m)
 
+    # Highlight the route edges in red
     for i in range(len(route)-1):
         u, v = route[i], route[i+1]
         if G.has_edge(u, v):
@@ -92,16 +115,22 @@ def plot_route_on_map(G, route):
                           (G.nodes[v]['y'], G.nodes[v]['x'])]
             folium.PolyLine(points, color='red', weight=5, opacity=0.8).add_to(m)
 
+    # Mark start and end nodes
     start_node = route[0]
     end_node = route[-1]
     folium.Marker([G.nodes[start_node]['y'], G.nodes[start_node]['x']],
                   popup='Start', icon=folium.Icon(color='green')).add_to(m)
     folium.Marker([G.nodes[end_node]['y'], G.nodes[end_node]['x']],
                   popup='Destination', icon=folium.Icon(color='red')).add_to(m)
+
     return m
 
 
 def analyse_osm_route_safety(route, final_score, G):
+    """
+    Derive a safety message from the route and its accessibility score.
+    Works with OSM graph by computing pure walking time from edge lengths.
+    """
     pure_time = 0.0
     for i in range(len(route)-1):
         u, v = route[i], route[i+1]
@@ -109,8 +138,10 @@ def analyse_osm_route_safety(route, final_score, G):
         first_key = next(iter(edge_data))
         attrs = edge_data[first_key]
         length = attrs.get('length', 0)
-        pure_time += length / 1.4
+        pure_time += length / 1.4      # seconds
+
     total_penalty = final_score - pure_time
+
     if total_penalty == 0:
         return "🟢 **Very Safe:** This route is completely sheltered and avoids all stairs and high-traffic crossings."
     elif total_penalty <= 5:
@@ -193,7 +224,7 @@ def get_coordinates_from_address(address):
 
 
 # ----------------------------------------------------------------------
-# Main Streamlit app
+# Main Streamlit application with session state
 # ----------------------------------------------------------------------
 def main():
     st.set_page_config(page_title="Accessibility Router (OSM)", page_icon="🗺️", layout="centered")
@@ -260,8 +291,13 @@ def main():
                 )
                 st.session_state.route = None
             else:
-                start_node = ox.nearest_nodes(G, start_coords[1], start_coords[0])
-                dest_node = ox.nearest_nodes(G, dest_coords[1], dest_coords[0])
+                # Note: ox.nearest_nodes requires scikit-learn to be installed
+                try:
+                    start_node = ox.nearest_nodes(G, start_coords[1], start_coords[0])
+                    dest_node = ox.nearest_nodes(G, dest_coords[1], dest_coords[0])
+                except ImportError as e:
+                    st.error("Missing optional dependency: scikit-learn. Please install it with: pip install scikit-learn")
+                    st.stop()
 
                 if start_node == dest_node:
                     st.warning("Start and destination are the same location!")
@@ -293,7 +329,5 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
 
 # streamlit run app.py
