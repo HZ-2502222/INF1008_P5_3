@@ -7,12 +7,12 @@ import folium
 from streamlit_folium import st_folium
 from geopy.geocoders import Nominatim
 import heapq
+import re
 
 # ----------------------------------------------------------------------
-# Original accessibility weight function (reused from your assignment)
+# Original accessibility weight function
 # ----------------------------------------------------------------------
 def calculate_accessibility_weight(base_time, stairs, sheltered, high_collision_risk):
-    """Calculate composite cost for an edge based on elderly accessibility."""
     weight = base_time
     if stairs:
         weight += 15
@@ -23,16 +23,14 @@ def calculate_accessibility_weight(base_time, stairs, sheltered, high_collision_
     return weight
 
 # ----------------------------------------------------------------------
-# OSM‑specific helper functions
+# OSM‑specific helpers
 # ----------------------------------------------------------------------
 def calculate_weight_from_osm_edge(u, v, key, data):
     length = data.get('length', 1)
     base_time = length / 1.4
-
     stairs = data.get('highway') == 'steps'
     sheltered = data.get('covered') == 'yes' or data.get('tunnel') is not None
     high_collision_risk = data.get('highway') in ['crossing', 'unmarked_crossing']
-
     return calculate_accessibility_weight(base_time, stairs, sheltered, high_collision_risk)
 
 
@@ -48,7 +46,6 @@ def find_most_accessible_route_osm(G, start_node, dest_node):
             continue
         if current == dest_node:
             break
-
         for neighbor, edge_dict in G[current].items():
             first_key = next(iter(edge_dict))
             attrs = edge_dict[first_key]
@@ -59,7 +56,6 @@ def find_most_accessible_route_osm(G, start_node, dest_node):
                 prev[neighbor] = current
                 heapq.heappush(pq, (new_dist, neighbor))
 
-    # Reconstruct path
     path = []
     node = dest_node
     while node is not None:
@@ -73,7 +69,6 @@ def plot_route_on_map(G, route):
     lats = [G.nodes[n]['y'] for n in G.nodes]
     lons = [G.nodes[n]['x'] for n in G.nodes]
     centre = [sum(lats)/len(lats), sum(lons)/len(lons)]
-
     m = folium.Map(location=centre, zoom_start=15)
 
     for u, v, data in G.edges(keys=False, data=True):
@@ -103,7 +98,6 @@ def plot_route_on_map(G, route):
                   popup='Start', icon=folium.Icon(color='green')).add_to(m)
     folium.Marker([G.nodes[end_node]['y'], G.nodes[end_node]['x']],
                   popup='Destination', icon=folium.Icon(color='red')).add_to(m)
-
     return m
 
 
@@ -116,9 +110,7 @@ def analyse_osm_route_safety(route, final_score, G):
         attrs = edge_data[first_key]
         length = attrs.get('length', 0)
         pure_time += length / 1.4
-
     total_penalty = final_score - pure_time
-
     if total_penalty == 0:
         return "🟢 **Very Safe:** This route is completely sheltered and avoids all stairs and high-traffic crossings."
     elif total_penalty <= 5:
@@ -130,12 +122,17 @@ def analyse_osm_route_safety(route, final_score, G):
 
 
 # ----------------------------------------------------------------------
-# Fallback dictionary of known Punggol locations with coordinates
-# (These coordinates were obtained from OpenStreetMap/Nominatim)
+# Enhanced fallback dictionary with multiple name variants
 # ----------------------------------------------------------------------
 KNOWN_LOCATIONS = {
-    "Blk 273C Punggol Field": (1.4030, 103.9070),   # approximate – replace with exact if known
-    "Punggol Polyclinic": (1.4005, 103.9100),       # approximate
+    # Format: (latitude, longitude)
+    "Blk 273C Punggol Field": (1.4030, 103.9070),
+    "Block 273C Punggol Field": (1.4030, 103.9070),   # variant
+    "273C Punggol Field": (1.4030, 103.9070),         # even simpler
+
+    "Punggol Polyclinic": (1.4005, 103.9100),
+    "Punggol Polyclinic 681 Punggol Drive": (1.4005, 103.9100),
+
     "Waterway Point": (1.4093, 103.9021),
     "Punggol MRT Station": (1.4054, 103.9023),
     "Punggol Park": (1.3810, 103.8980),
@@ -144,30 +141,59 @@ KNOWN_LOCATIONS = {
     "Punggol Settlement": (1.4150, 103.9120),
 }
 
+def normalise_location_name(name):
+    """Convert a location string to a standard form for matching."""
+    name = name.lower()
+    # Remove punctuation and extra spaces
+    name = re.sub(r'[^\w\s]', '', name)
+    # Replace common abbreviations
+    name = name.replace('blk', 'block')
+    name = name.replace('mrt', 'mrt station')
+    name = name.replace('stn', 'station')
+    # Collapse multiple spaces
+    name = ' '.join(name.split())
+    return name
+
 def get_coordinates_from_address(address):
-    """
-    Try to geocode the address. If it fails, check if the address (case‑insensitive)
-    matches any key in the KNOWN_LOCATIONS dictionary. Return (lat, lon) or None.
-    """
+    """Try Nominatim first; if that fails, use fallback dictionary with smart matching."""
     # First, try Nominatim
     geolocator = Nominatim(user_agent="accessibility_app")
     try:
         location = geolocator.geocode(address)
         if location:
             return (location.latitude, location.longitude)
-    except:
+    except Exception:
         pass
 
-    # Fallback: check against known locations (case‑insensitive)
+    # Fallback: normalise the address and check against normalised known names
+    norm_addr = normalise_location_name(address)
+    best_match = None
+    best_score = 0
+
+    for known_name, coords in KNOWN_LOCATIONS.items():
+        norm_known = normalise_location_name(known_name)
+        # Check if the normalised address contains the normalised known name or vice versa
+        if norm_known in norm_addr or norm_addr in norm_known:
+            # Give a simple score based on length ratio to prefer more specific matches
+            score = len(norm_known) / len(norm_addr) if norm_known in norm_addr else len(norm_addr) / len(norm_known)
+            if score > best_score:
+                best_score = score
+                best_match = coords
+
+    if best_match:
+        return best_match
+
+    # If still no match, try a simple substring search on the original (non-normalised) names
     addr_lower = address.lower()
-    for name, coords in KNOWN_LOCATIONS.items():
-        if name.lower() in addr_lower or addr_lower in name.lower():
+    for known_name, coords in KNOWN_LOCATIONS.items():
+        if known_name.lower() in addr_lower or addr_lower in known_name.lower():
             return coords
+
     return None
 
 
 # ----------------------------------------------------------------------
-# Main Streamlit application
+# Main Streamlit app
 # ----------------------------------------------------------------------
 def main():
     st.set_page_config(page_title="Accessibility Router (OSM)", page_icon="🗺️", layout="centered")
@@ -209,32 +235,29 @@ def main():
             dest_coords = get_coordinates_from_address(dest_full)
 
         if not start_coords or not dest_coords:
+            known_list = "\n".join([f"- {name}" for name in KNOWN_LOCATIONS.keys()])
             st.error(
                 "Could not find one of the addresses. Please try:\n"
                 "- Using a more complete address (e.g., include road name or 'Block')\n"
                 "- Adding 'Singapore' if not already present\n"
                 "- Checking for typos\n\n"
-                "Alternatively, try one of these known locations:\n" +
-                ", ".join(KNOWN_LOCATIONS.keys())
+                "Alternatively, try one of these known locations:\n" + known_list
             )
             return
 
-        # Find nearest nodes in the graph
-        start_node = ox.nearest_nodes(G, start_coords[1], start_coords[0])  # ox.nearest_nodes expects lon, lat
+        start_node = ox.nearest_nodes(G, start_coords[1], start_coords[0])
         dest_node = ox.nearest_nodes(G, dest_coords[1], dest_coords[0])
 
         if start_node == dest_node:
             st.warning("Start and destination are the same location!")
             return
 
-        # Run Dijkstra
         route, score = find_most_accessible_route_osm(G, start_node, dest_node)
 
         if score == float('inf'):
             st.error("No route found between these locations.")
             return
 
-        # Display the map
         m = plot_route_on_map(G, route)
         st_folium(m, width=700, height=500)
 
@@ -244,9 +267,20 @@ def main():
 
         with st.expander("Show route nodes (OSM IDs)"):
             st.write(route)
+            
+from geopy.geocoders import Nominatim
+geolocator = Nominatim(user_agent="test")
+addr = "Block 273C Punggol Field, Singapore"
+loc = geolocator.geocode(addr)
+print("Nominatim:", loc)
 
+# Test fallback manually
+from your_app import get_coordinates_from_address  # after pasting the function
+print("Fallback:", get_coordinates_from_address(addr))
 
 if __name__ == "__main__":
     main()
+
+
 
 # streamlit run app.py
