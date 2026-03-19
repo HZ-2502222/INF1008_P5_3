@@ -153,7 +153,7 @@ def analyse_osm_route_safety(route, final_score, G):
 
 
 # ----------------------------------------------------------------------
-# Main Streamlit application
+# Main Streamlit application with improved geocoding
 # ----------------------------------------------------------------------
 def main():
     st.set_page_config(page_title="Accessibility Router (OSM)", page_icon="🗺️", layout="centered")
@@ -172,6 +172,18 @@ def main():
 
     st.divider()
 
+    # Cache geocoding results to avoid repeated calls and respect rate limits
+    @st.cache_data
+    def geocode_address(address):
+        geolocator = Nominatim(user_agent="accessibility_app")
+        return geolocator.geocode(address)
+
+    def ensure_singapore(addr):
+        """Append ', Singapore' if not already present (case‑insensitive)."""
+        if "singapore" not in addr.lower():
+            return f"{addr}, Singapore"
+        return addr
+
     col1, col2 = st.columns(2)
     with col1:
         start_address = st.text_input("Start address (e.g., 'Blk 273C Punggol')")
@@ -183,17 +195,21 @@ def main():
             st.warning("Please enter both addresses.")
             return
 
-        geolocator = Nominatim(user_agent="accessibility_app")
-        try:
-            with st.spinner("Geocoding addresses..."):
-                start_loc = geolocator.geocode(start_address)
-                dest_loc = geolocator.geocode(dest_address)
-        except Exception as e:
-            st.error(f"Geocoding error: {e}")
-            return
+        # Ensure addresses include country for better geocoding
+        start_full = ensure_singapore(start_address)
+        dest_full = ensure_singapore(dest_address)
+
+        with st.spinner("Geocoding addresses..."):
+            start_loc = geocode_address(start_full)
+            dest_loc = geocode_address(dest_full)
 
         if not start_loc or not dest_loc:
-            st.error("Could not find one of the addresses. Try being more specific (e.g., include 'Singapore').")
+            st.error(
+                "Could not find one of the addresses. Please try:\n"
+                "- Using a more complete address (e.g., include road name or 'Block')\n"
+                "- Adding 'Singapore' if not already present\n"
+                "- Checking for typos"
+            )
             return
 
         # Find nearest nodes in the graph
@@ -226,8 +242,8 @@ def main():
         with st.expander("Show route nodes (OSM IDs)"):
             st.write(route)
 
-# streamlit run app.py
-
 
 if __name__ == "__main__":
     main()
+
+# streamlit run app.py
