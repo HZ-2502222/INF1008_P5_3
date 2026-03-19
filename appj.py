@@ -3,36 +3,76 @@ import matplotlib.pyplot as plt
 import heapq
 import matplotlib.image as mpimg
 import os
+import random
 
-# -------------------- Maze loading with error handling --------------------
-def load_maze(filename="map.txt"):
-    """Load maze from file; return list of lists."""
-    maze = []
+# -------------------- Random maze generator --------------------
+def generate_random_maze(rows, cols):
+    """
+    Create a random maze with:
+    - 0 : path (approx 70%)
+    - 1 : wall (approx 20%)
+    - 2 : shelter (approx 5%)
+    - 3 : building (approx 5%)
+    Then place landmarks A..E on random path or shelter cells.
+    """
+    # Define probabilities
+    probs = [0] * 70 + [1] * 20 + [2] * 5 + [3] * 5   # total 100
+    maze = [[random.choice(probs) for _ in range(cols)] for _ in range(rows)]
+
+    # Collect all traversable cells (not wall 1, not building 3)
+    traversable = [(r, c) for r in range(rows) for c in range(cols)
+                   if maze[r][c] not in (1, 3)]
+
+    # Place landmarks A..E on distinct traversable cells
+    if len(traversable) < 5:
+        # If too few traversable cells, fill with paths
+        for r in range(rows):
+            for c in range(cols):
+                if maze[r][c] in (1, 3):
+                    maze[r][c] = 0
+        traversable = [(r, c) for r in range(rows) for c in range(cols)]
+
+    landmark_positions = random.sample(traversable, 5)
+    letters = ['A', 'B', 'C', 'D', 'E']
+    for (r, c), letter in zip(landmark_positions, letters):
+        maze[r][c] = letter   # replace cell content with the letter
+
+    return maze
+
+# -------------------- Maze loading --------------------
+def load_maze(filename="map.txt", use_random=False, rows=10, cols=10):
+    """
+    If use_random is True, generate a random maze.
+    Otherwise try to load from file; if file not found, fallback to random.
+    """
+    if use_random:
+        st.info("🎲 Generating random maze...")
+        return generate_random_maze(rows, cols)
+
     try:
         with open(filename, "r") as f:
+            maze = []
             for line in f:
                 row = []
                 for ch in line.strip():
                     if ch == "0":
-                        row.append(0)   # path
+                        row.append(0)
                     elif ch == "1":
-                        row.append(1)   # wall
+                        row.append(1)
                     elif ch in ("S", "2"):
-                        row.append(2)   # shelter
+                        row.append(2)
                     elif ch == "Z":
-                        row.append(3)   # building
+                        row.append(3)
                     else:
-                        row.append(ch)  # landmark (A,B,C,D,E)
+                        row.append(ch)
                 maze.append(row)
+        st.success(f"✅ Loaded maze from {filename} ({len(maze)}x{len(maze[0])})")
+        return maze
     except FileNotFoundError:
-        st.error(f"❌ File '{filename}' not found. Please ensure it exists in the app directory.")
-        st.stop()
-    return maze
+        st.warning(f"⚠️ File '{filename}' not found. Generating random maze instead.")
+        return generate_random_maze(rows, cols)
 
-# Load maze (will stop if file missing)
-maze = load_maze("map.txt")
-
-# -------------------- Graph building with rain penalty --------------------
+# -------------------- Graph building --------------------
 def build_graph(maze, is_raining=False):
     rows, cols = len(maze), len(maze[0])
     graph = {}
@@ -41,13 +81,12 @@ def build_graph(maze, is_raining=False):
 
     for r in range(rows):
         for c in range(cols):
-            if maze[r][c] not in (1,3):   # not wall or building
+            if maze[r][c] not in (1,3):
                 graph[(r,c)] = []
                 for dr, dc in directions:
                     nr, nc = r + dr, c + dc
                     if 0 <= nr < rows and 0 <= nc < cols and maze[nr][nc] not in (1,3):
                         if is_raining:
-                            # cost 1 if neighbor is shelter (2), else heavy penalty
                             cost = 1 if maze[nr][nc] == 2 else RAIN_PENALTY
                         else:
                             cost = 1
@@ -89,7 +128,7 @@ def dijkstra_animated(graph, start, end):
     distances[start] = 0
     prev = {node: None for node in graph}
     pq = [(0, start)]
-    visited_order = []          # nodes in the order they are popped from heap
+    visited_order = []
     while pq:
         current_distance, current_node = heapq.heappop(pq)
         if current_node in visited_order:
@@ -103,7 +142,6 @@ def dijkstra_animated(graph, start, end):
                 distances[neighbor] = distance
                 prev[neighbor] = current_node
                 heapq.heappush(pq, (distance, neighbor))
-    # Reconstruct path
     path = []
     node = end
     while node:
@@ -112,11 +150,11 @@ def dijkstra_animated(graph, start, end):
     path = path[::-1]
     return visited_order, path
 
-# -------------------- Visualization function --------------------
+# -------------------- Visualization --------------------
 def visualize_path(maze, path, explored=None, end=None, unreachable=False):
     fig, ax = plt.subplots(figsize=(12,6), facecolor="#333333")
 
-    # Load images (with fallback colors if missing)
+    # Load images (with fallback)
     try:
         wall_img = mpimg.imread("bush.png")
     except:
@@ -130,46 +168,41 @@ def visualize_path(maze, path, explored=None, end=None, unreachable=False):
     except:
         path_img = None
 
-    # Draw base grid
     for r in range(len(maze)):
         for c in range(len(maze[0])):
             cell = maze[r][c]
-            if cell == 0:          # Path – now white to match legend
+            if cell == 0:
                 if path_img is not None:
                     ax.imshow(path_img, extent=(c, c+1, r, r+1))
                 else:
                     ax.add_patch(plt.Rectangle((c, r), 1, 1, color="#ffffff"))
-            elif cell == 1:         # Wall
+            elif cell == 1:
                 if wall_img is not None:
                     ax.imshow(wall_img, extent=(c, c+1, r, r+1))
                 else:
                     ax.add_patch(plt.Rectangle((c, r), 1, 1, color="#1b5e20"))
-            elif cell == 2:         # Shelter
+            elif cell == 2:
                 ax.add_patch(plt.Rectangle((c, r), 1, 1, color="#4caf50"))
-            elif cell == 3:         # Building
+            elif cell == 3:
                 if building_img is not None:
                     ax.imshow(building_img, extent=(c, c+1, r, r+1))
                 else:
                     ax.add_patch(plt.Rectangle((c, r), 1, 1, color="#795548"))
-            elif isinstance(cell, str):  # Landmark A–E
-                # Different colors for different landmarks (optional)
+            elif isinstance(cell, str):
                 color = "#fdd835" if cell == "A" else "#2196f3"
                 ax.add_patch(plt.Rectangle((c, r), 1, 1, color=color))
                 ax.text(c+0.5, r+0.5, cell, ha="center", va="center",
                         fontsize=12, color="white", weight='bold')
-            else:                    # Fallback (should not happen)
+            else:
                 ax.add_patch(plt.Rectangle((c, r), 1, 1, color="white"))
 
-    # Overlay explored nodes (light blue)
     if explored:
         for r, c in explored:
             ax.add_patch(plt.Rectangle((c, r), 1, 1, color="#90caf9", alpha=0.3))
 
-    # Overlay final path (blue)
     for r, c in path:
         ax.add_patch(plt.Rectangle((c, r), 1, 1, color="#2979ff", alpha=0.7))
 
-    # Highlight unreachable destination (orange)
     if unreachable and end:
         er, ec = end
         ax.add_patch(plt.Rectangle((ec, er), 1, 1, color="#ff5722", alpha=0.8))
@@ -183,9 +216,34 @@ def visualize_path(maze, path, explored=None, end=None, unreachable=False):
     return fig
 
 # -------------------- Streamlit UI --------------------
-st.title("🗺️ Maze Pathfinder with Dijkstra")
+st.title("🗺️ Random Maze Pathfinder")
 
-# Sidebar or main area? We'll keep it simple.
+# Sidebar controls
+with st.sidebar:
+    st.header("Maze Settings")
+    use_random = st.checkbox("🎲 Generate random maze (instead of map.txt)", value=True)
+    if use_random:
+        rows = st.slider("Number of rows", 5, 20, 10)
+        cols = st.slider("Number of columns", 5, 20, 10)
+        if st.button("🔄 Generate New Random Maze"):
+            st.session_state['maze'] = generate_random_maze(rows, cols)
+            st.rerun()
+    else:
+        st.info("Will try to load map.txt")
+
+# Initialize maze in session state if not present
+if 'maze' not in st.session_state:
+    if use_random:
+        st.session_state['maze'] = generate_random_maze(rows, cols)
+    else:
+        st.session_state['maze'] = load_maze(use_random=False)
+
+maze = st.session_state['maze']
+
+# Show maze dimensions
+st.write(f"Current maze: {len(maze)} rows × {len(maze[0])} columns")
+
+# Main controls
 start_choice = st.selectbox("Choose start:", ["A","B","C","D","E"])
 end_choice = st.selectbox("Choose destination:", ["A","B","C","D","E"])
 is_raining = st.checkbox("🌧️ It’s raining (prefer sheltered walkways)")
@@ -197,7 +255,7 @@ frame_skip = 1
 if skip_checkbox:
     frame_skip = st.slider("Skip every N frames", 1, 20, 5)
 
-# Find coordinates of chosen landmarks
+# Find landmarks
 def find_landmark(letter):
     for r in range(len(maze)):
         for c in range(len(maze[0])):
@@ -215,14 +273,13 @@ if end_pos is None:
     st.error(f"Landmark {end_choice} not found in maze.")
     st.stop()
 
-# Build graph (once per run, but depends on rain checkbox)
+# Build graph
 graph = build_graph(maze, is_raining=is_raining)
 
-# -------------------- Animation Mode --------------------
+# --- Animation mode ---
 if animate:
     visited_order, final_path = dijkstra_animated(graph, start_pos, end_pos)
 
-    # Check if destination is reachable
     if not final_path or final_path[0] != start_pos:
         st.error(f"❌ No path from {start_choice} to {end_choice}")
         fig = visualize_path(maze, [], end=end_pos, unreachable=True)
@@ -230,44 +287,37 @@ if animate:
         plt.close(fig)
         st.stop()
 
-    # Prepare exploration frames
     placeholder = st.empty()
     explored_so_far = []
-    # Determine which nodes to display based on skip frames
+
     if skip_checkbox:
         displayed_indices = list(range(0, len(visited_order), frame_skip))
-        # Always include the last node (end) to show final exploration state
         if displayed_indices[-1] != len(visited_order)-1:
             displayed_indices.append(len(visited_order)-1)
     else:
         displayed_indices = range(len(visited_order))
 
-    # Show progress bar
     progress_bar = st.progress(0)
     status_text = st.empty()
 
     for i, idx in enumerate(displayed_indices):
-        # Add all nodes up to idx to explored_so_far
-        # (we want cumulative exploration)
         explored_so_far = visited_order[:idx+1]
         fig = visualize_path(maze, path=[], explored=explored_so_far)
         placeholder.pyplot(fig, use_container_width=True)
-        plt.close(fig)  # FIX: close figure to free memory
+        plt.close(fig)
 
-        # Update progress
         progress_bar.progress((i+1) / len(displayed_indices))
         status_text.text(f"Explored {len(explored_so_far)} nodes...")
 
-    # Final display with the full path
     fig = visualize_path(maze, final_path, explored=explored_so_far)
     placeholder.pyplot(fig, use_container_width=True)
     plt.close(fig)
     progress_bar.empty()
     status_text.empty()
     st.success(f"✅ Path found from {start_choice} to {end_choice}")
-    st.info(f"Steps: {len(final_path)-1}   Total cost: {sum(graph[node][i][1] for i,node in enumerate(final_path[:-1]) if node in graph)}")
+    st.info(f"Steps: {len(final_path)-1}")
 
-# -------------------- Static Mode --------------------
+# --- Static mode ---
 else:
     path, cost = dijkstra(graph, start_pos, end_pos)
     if not path:
@@ -282,22 +332,21 @@ else:
         st.pyplot(fig, use_container_width=True)
         plt.close(fig)
 
-# -------------------- Legend (updated to match actual colors) --------------------
+# --- Legend ---
 st.markdown("---")
 st.markdown("### Legend")
 col1, col2, col3 = st.columns(3)
 with col1:
     st.markdown("🟩 Shelter")
-    st.markdown("⬜ Path")               # now path is white
+    st.markdown("⬜ Path")
 with col2:
     st.markdown("🟦 Final path")
-    st.markdown("🟨 Explored nodes (light blue)")   # corrected
+    st.markdown("🟨 Explored nodes (light blue)")
 with col3:
     st.markdown("🟨 Landmark (A gold / others blue)")
     st.markdown("🟧 Unreachable destination")
     st.markdown("🌳 Wall (bush.png)")
     st.markdown("🏢 Building (blk.png)")
 
-# Optional warning if images are missing
 if not os.path.exists("bush.png") or not os.path.exists("blk.png") or not os.path.exists("path.png"):
-    st.warning("⚠️ One or more image files (bush.png, blk.png, path.png) are missing. Using fallback colors.")
+    st.warning("⚠️ One or more image files are missing. Using fallback colors.")
