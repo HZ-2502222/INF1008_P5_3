@@ -7,19 +7,25 @@ import heapq
 from functions import calculate_accessibility_weight, find_most_accessible_route_no_pq, analyse_route_safety
 # draw_neighbourhood_graph will be replaced
 
-def calculate_accessibility_weight(base_time, stairs, sheltered, high_collision_risk):
-    """Calculates the composite cost of a path based on elderly accessibility."""
-    weight = base_time
+def calculate_weight_from_osm_edge(u, v, key, data):
+    # 'data' is the attribute dictionary of the edge in the OSMnx graph
     
-    # Apply penalties and bonuses
-    if stairs:
-        weight += 15 # Severe penalty for stairs
-    if not sheltered:
-        weight += 3 # Slight penalty for rain/sun exposure
-    if high_collision_risk:
-        weight += 20 # Major penalty to minimize pedestrian collisions
-        
-    return weight
+    # Base "time" from length (meters) and average walking speed (1.4 m/s)
+    length = data.get('length', 1)
+    base_time = length / 1.4   # in seconds
+    
+    # Detect stairs
+    stairs = data.get('highway') == 'steps'
+    
+    # Detect sheltered paths: look for 'covered=yes' or 'tunnel' tags
+    sheltered = data.get('covered') == 'yes' or data.get('tunnel') is not None
+    
+    # Collision risk is not directly available from OSM; you could approximate
+    # from highway type (e.g., 'crossing' may be risky) or ignore for demo.
+    high_collision_risk = data.get('highway') in ['crossing', 'unmarked_crossing']
+    
+    # Call your original function with these derived values
+    return calculate_accessibility_weight(base_time, stairs, sheltered, high_collision_risk)
 
 def find_most_accessible_route(graph, start, destination):
     """Implements Dijkstra's algorithm with a priority queue to find the most accessible route."""
