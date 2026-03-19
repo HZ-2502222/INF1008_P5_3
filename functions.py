@@ -138,7 +138,7 @@ def find_most_accessible_route_no_pq(graph, start, destination):
 def draw_neighbourhood_graph(graph_data, highlighted_route=None):
     ''' Draws the neighbourhood graph with optional highlighted route.'''
     
-    G = nx.Graph() # Create an empty graph object
+    G = nx.DiGraph() # Create an empty graph object
     
     # Add edges to the graph based on the provided graph data
     for node, neighbours in graph_data.items():
