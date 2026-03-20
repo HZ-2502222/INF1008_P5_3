@@ -1,60 +1,141 @@
-**Digital Clinic Accessibility Router**
+# Digital Clinic Accessibility Router
 
-**Singapore Institute of Technology (SIT)**
+![Python](https://img.shields.io/badge/python-3.10%2B-blue)
+![Streamlit](https://img.shields.io/badge/UI-Streamlit-ff4b4b)
+![Status](https://img.shields.io/badge/status-academic%20project-informational)
 
-**Course:** INF1008 - Data Structures and Algorithms 
+Accessibility-first route planning for a neighborhood map, built with Streamlit and Dijkstra shortest-path search.
 
-**Assignment 2:** Evaluation of Data Structures or Algorithms using AI Chatbots 
+This project was developed for Singapore Institute of Technology (SIT), INF1008 Data Structures and Algorithms.
 
+## Table of Contents
 
-**Project Overview**
+- [What This Project Does](#what-this-project-does)
+- [Why This Project Is Useful](#why-this-project-is-useful)
+- [Project Structure](#project-structure)
+- [Getting Started](#getting-started)
+- [Usage](#usage)
+- [Getting Help](#getting-help)
+- [Maintainers and Contributing](#maintainers-and-contributing)
 
-The Digital Clinic Accessibility Router is a localised pathfinding application designed specifically for elderly residents in Punggol. Standard navigation apps calculate routes based purely on distance or time. This application utilises a custom-weighted search algorithm to prioritise physical accessibility and safety, calculating the least strenuous route to community digital literacy clinics.
+## What This Project Does
 
-**Core Features**
+The app computes accessible walking routes across a grid-based map using Dijkstra's algorithm with weighted movement costs.
 
-  - **Accessibility-First Routing:** Evaluates paths based on elderly-specific constraints rather than just geographical distance.
+Users can:
 
-  - **Composite Weighting System:** Dynamically assigns "cost penalties" to routes featuring steep stairs (+15) or high-risk pedestrian crossings (+20), while rewarding sheltered walkways (-3).
+- Choose one start landmark and up to five destinations
+- Simulate weather-aware routing (rain mode)
+- Prefer sheltered paths and optionally avoid stairs
+- Visualize explored nodes and final path segments
+- Inspect route cost breakdown (normal, sheltered, stairs)
+- Run an optional zebra-crossing crash simulation
 
-  - **Hazard Avoidance:** Actively routes vulnerable pedestrians away from high-traffic collision zones, applying practical computer engineering concepts to community safety.
+The implementation is in [INF1008_P5_Team03/app.py](INF1008_P5_Team03/app.py), with map and visual assets in the same folder.
 
-**Algorithm Details: Dijkstra's Algorithm (Array Implementation)**
+## Why This Project Is Useful
 
+- Demonstrates practical use of graph algorithms in a real scenario (mobility and accessibility)
+- Shows how to model route preferences with weighted edges
+- Provides a visual and interactive way to understand shortest-path behavior
+- Offers a compact, easy-to-run reference for classroom demos and algorithm discussions
 
-This application implements Dijkstra's Algorithm to find the single-source shortest path across the neighbourhood graph.
-Implementation Note: To suit the localised, small-scale nature of a single HDB neighbourhood graph, this implementation intentionally omits a Priority Queue (Min-Heap). Instead, it utilises a standard Python list/array to track unvisited nodes. While a Min-Heap offers an optimal time complexity of O((V + E) log V) for massive datasets, an array-based approach operating at $O(V^2)$ provides identical real-world performance for small graphs while maintaining highly readable, simplified code architecture.
+## Project Structure
 
+```text
+.
+|-- README.md
+|-- requirements.txt
+`-- INF1008_P5_Team03/
+    |-- app.py
+    |-- map.txt
+    |-- blk.png
+    |-- bush.png
+    `-- .streamlit/
+        `-- config.toml
+```
 
-**Setup & Execution**
+## Getting Started
 
+### 1. Clone the repository
 
-To run the accessibility router, follow these steps: 
+```bash
+git clone https://github.com/HZ-2502222/INF1008_P5_3.git
+cd INF1008_P5_3
+```
 
-  1. Download the .py files included in this repository. 
+### 2. Create and activate a virtual environment
 
-  2.  Load them into your preferred IDE (e.g., VS Code, PyCharm). 
+Windows (PowerShell):
 
-  3. Ensure you have Python 3.x installed on your machine. 
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+```
 
-  4. Libraries needed to run the application:
-     - networkx
-     - matplotlib
-     - streamlit
+macOS/Linux:
 
-  5. Run the main file to execute the routing script.
+```bash
+python -m venv .venv
+source .venv/bin/activate
+```
 
-**Usage**
+### 3. Install dependencies
 
-When the script runs, the application initialises the Punggol neighbourhood graph. 
-It will output: 
+```bash
+pip install -r requirements.txt
+```
 
-  - The starting location (e.g., Blk 273C).
+### 4. Run the app
 
-  - The destination (e.g., Digital Clinic). 
+Run from the app folder so map and image assets are resolved correctly:
 
-  - The calculated optimal route dynamically avoids heavy penalties, such as stairs and unsheltered high-risk crossings.
+```bash
+cd INF1008_P5_Team03
+streamlit run app.py
+```
 
-  - The final composite "Accessibility Cost Score."
+Then open the local Streamlit URL shown in your terminal (typically http://localhost:8501).
 
-  - Safety ratings (Very Safe, Moderately Safe, Caution Required, High Risk)  of the calculated route and respective reasons.
+## Usage
+
+1. Select a start landmark (A-E).
+2. Add one or more destination landmarks.
+3. Choose route preferences:
+   - Raining mode to strongly favor sheltered movement
+   - Avoid stairs to treat stair cells as blocked
+4. Click Show Animation to compute and visualize the route.
+5. Review metrics:
+   - Total steps
+   - Weighted total cost
+   - Cost breakdown by terrain type
+
+## Getting Help
+
+- Open an issue for bugs or feature requests:
+  https://github.com/HZ-2502222/INF1008_P5_3/issues
+- Browse Streamlit documentation for deployment and UI behavior:
+  https://docs.streamlit.io/
+- Review source files directly:
+  - [INF1008_P5_Team03/app.py](INF1008_P5_Team03/app.py)
+  - [INF1008_P5_Team03/map.txt](INF1008_P5_Team03/map.txt)
+  - [requirements.txt](requirements.txt)
+
+## Maintainers and Contributing
+
+Maintained by P5 Team 3 for INF1008 coursework.
+
+Contributions are welcome through pull requests. Please include:
+
+- A clear summary of the problem and solution
+- Reproducible steps for behavior changes
+- Updates to documentation when behavior changes
+
+Suggested contribution workflow:
+
+1. Fork and create a feature branch.
+2. Make focused, well-scoped changes.
+3. Verify the app runs locally with Streamlit.
+4. Open a pull request with context and test notes.
+
+If your repository has a contribution policy, add a [CONTRIBUTING.md](CONTRIBUTING.md) file and reference it here.
