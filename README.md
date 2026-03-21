@@ -13,9 +13,9 @@ This project was developed for **Singapore Institute of Technology (SIT), INF100
 
 ## 📋 Table of Contents
 
-- [Quick Start](##quick-start)
-- [What This Project Does](##what-this-project-does)
-- [Why This Project Is Useful](##why-this-project-is-useful)
+- [Quick Start](#quick-start)
+- [What This Project Does](#what-this-project-does)
+- [Why This Project Is Useful](#why-this-project-is-useful)
 - [Features](#features)
 - [Project Structure](#project-structure)
 - [Getting Started](#getting-started)
@@ -24,7 +24,7 @@ This project was developed for **Singapore Institute of Technology (SIT), INF100
 - [Map Format](#map-format)
 - [Customization](#customization)
 - [Troubleshooting](#troubleshooting)
-- [Getting Help](##getting-help)
+- [Getting Help](#getting-help)
 
 ---
 
