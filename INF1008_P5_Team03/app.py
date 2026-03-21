@@ -1,4 +1,6 @@
 import streamlit as st
+from streamlit import runtime
+from streamlit.web import cli as stcli
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import heapq
@@ -6,6 +8,9 @@ import matplotlib.image as mpimg
 import os
 import numpy as np
 import random
+import base64
+import sys
+
 
 if "crashed" not in st.session_state:
     st.session_state.crashed = False
@@ -154,10 +159,12 @@ def create_base_figure(_maze):
 
     ax.imshow(color_map, interpolation='nearest', extent=(0, cols, rows, 0), zorder=0)
 
-    try: wall_img = mpimg.imread("bush.png")
+    try: wall_img = np.flipud(mpimg.imread("bush.png"))
     except: wall_img = None
-    try: building_img = mpimg.imread("blk.png")
+    try: building_img = np.flipud(mpimg.imread("blk.png"))
     except: building_img = None
+    try: stairs_img = np.flipud(mpimg.imread("stairs.png"))
+    except: stairs_img = None
 
     for r in range(rows):
         for c in range(cols):
@@ -167,7 +174,7 @@ def create_base_figure(_maze):
             elif cell == 3 and building_img is not None:
                 ax.imshow(building_img, extent=(c, c+1, r, r+1), zorder=1)
             elif cell == 4:
-                ax.text(c + 0.5, r + 0.5, "🪜", ha='center', va='center', fontsize=12, zorder=2)
+                ax.imshow(stairs_img, extent=(c, c+1, r, r+1), zorder=2)
             elif isinstance(cell, str):
                 ax.text(c + 0.5, r + 0.5, cell, ha='center', va='center', fontsize=12, color='white', weight='bold', zorder=2)
             elif cell == 6:
@@ -220,221 +227,243 @@ def show_unreachable(ax, end_pos):
     rect._overlay = True
     ax.add_patch(rect)
 
+def get_base64_image(path):
+    with open(path, "rb") as img_file:
+        return base64.b64encode(img_file.read()).decode()
+
 # ------------------- Streamlit UI -------------------
-st.set_page_config(page_title="Maze Pathfinder", layout="wide")
+def main():
+    st.set_page_config(page_title="Maze Pathfinder", layout="wide")
 
-st.markdown("""
-<style>
-    .main-header { text-align: center; font-size: 2.5rem; font-weight: bold; margin-bottom: 1rem; color: #4CAF50; }
-    .metric-card { background-color: #f0f2f6; border-radius: 10px; padding: 10px; text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-</style>
-""", unsafe_allow_html=True)
+    st.markdown("""
+    <style>
+        .main-header { text-align: center; font-size: 2.5rem; font-weight: bold; margin-bottom: 1rem; color: #4CAF50; }
+        .metric-card { background-color: #f0f2f6; border-radius: 10px; padding: 10px; text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+    </style>
+    """, unsafe_allow_html=True)
 
-st.markdown('<div class="main-header" style=color:#D3D3D3>🗺️ Map Pathfinding with Dijkstra</div>', unsafe_allow_html=True)
+    st.markdown('<div class="main-header" style=color:#D3D3D3>🗺️ Map Pathfinding with Dijkstra</div>', unsafe_allow_html=True)
 
-with st.sidebar:
-    st.markdown("### 🧭 Navigation")
-    start_choice = st.selectbox("Choose start:", ["A","B","C","D","E"])
-    
-    # Dynamic destinations UI
-    destinations = []
-    for i in range(st.session_state.num_destinations):
-        dest_choice = st.selectbox(f"Destination {i+1}:", ["A","B","C","D","E"], index=min(i+1, 4), key=f"dest_{i}")
-        destinations.append(dest_choice)
+    with st.sidebar:
+        st.markdown("### 🧭 Navigation")
+        start_choice = st.selectbox("Choose start:", ["A","B","C","D","E"])
         
-    colA, colB = st.columns(2)
-    with colA:
-        if st.button("➕ Add Dest") and st.session_state.num_destinations < 5:
-            st.session_state.num_destinations += 1
+        # Dynamic destinations UI
+        destinations = []
+        for i in range(st.session_state.num_destinations):
+            dest_choice = st.selectbox(f"Destination {i+1}:", ["A","B","C","D","E"], index=min(i+1, 4), key=f"dest_{i}")
+            destinations.append(dest_choice)
+            
+        colA, colB = st.columns(2)
+        with colA:
+            if st.button("➕ Add Dest") and st.session_state.num_destinations < 5:
+                st.session_state.num_destinations += 1
+                st.rerun()
+        with colB:
+            if st.button("➖ Remove") and st.session_state.num_destinations > 1:
+                st.session_state.num_destinations -= 1
+                st.rerun()
+        
+        st.markdown("---")
+        st.markdown("### ⚖️ Route Preferences")
+        is_raining = st.checkbox("🌧️ Raining, use sheltered walkways")
+        avoid_stairs = st.checkbox("♿ Wheelchair User")
+
+        st.markdown("---")
+        speed = st.radio("Frame skipping", ["Slow", "Medium", "Fast", "Instant"], index=1)
+        frame_skip = {"Slow": 1, "Medium": 40, "Fast": 60, "Instant": 1000}[speed]
+        animate = st.button("▶️ Show Animation", use_container_width=True)
+        
+        st.markdown("---")
+        crash_chance = st.slider("Crash probability at zebra crossing (%)", 0, 100, 1, 5) / 100.0 
+        
+        if st.button("🔙 Reset Simulation", key="reset_button"):
+            st.session_state.crashed = False
             st.rerun()
-    with colB:
-        if st.button("➖ Remove") and st.session_state.num_destinations > 1:
-            st.session_state.num_destinations -= 1
-            st.rerun()
-    
-    st.markdown("---")
-    st.markdown("### ⚖️ Route Preferences")
-    is_raining = st.checkbox("🌧️ Raining, use sheltered walkways")
-    avoid_stairs = st.checkbox("♿ Avoid Stairs completely")
 
-    st.markdown("---")
-    speed = st.radio("Frame skipping", ["Slow", "Medium", "Fast", "Instant"], index=1)
-    frame_skip = {"Slow": 1, "Medium": 10, "Fast": 20, "Instant": 1000}[speed]
-    animate = st.button("▶️ Show Animation", use_container_width=True)
-    
-    st.markdown("---")
-    crash_chance = st.slider("Crash probability at zebra crossing (%)", 0, 100, 1, 5) / 100.0 
-    
-    if st.button("🔙 Reset Simulation", key="reset_button"):
-        st.session_state.crashed = False
-        st.rerun()
+    col1, col2 = st.columns([2, 1])
 
-col1, col2 = st.columns([2, 1])
+    if not os.path.exists("map.txt"):
+        st.error("Maze file 'map.txt' not found.")
+        st.stop()
 
-if not os.path.exists("map.txt"):
-    st.error("Maze file 'map.txt' not found.")
-    st.stop()
+    maze = load_maze("map.txt")
 
-maze = load_maze("map.txt")
+    # Extract coordinates
+    def get_coords(target):
+        return next(((r,c) for r in range(len(maze)) for c in range(len(maze[0])) if maze[r][c]==target), None)
 
-# Extract coordinates
-def get_coords(target):
-    return next(((r,c) for r in range(len(maze)) for c in range(len(maze[0])) if maze[r][c]==target), None)
+    start_pos = get_coords(start_choice)
+    dest_positions = [get_coords(d) for d in destinations]
 
-start_pos = get_coords(start_choice)
-dest_positions = [get_coords(d) for d in destinations]
+    graph = build_graph(maze, is_raining, avoid_stairs)
+    fig, ax = create_base_figure(maze)
 
-graph = build_graph(maze, is_raining, avoid_stairs)
-fig, ax = create_base_figure(maze)
-
-with col1:
-    st.markdown("### 🗺️ Maze Layout")
-    fig_placeholder = st.empty()
-    results_placeholder = st.empty()
-    if not animate:
-        fig_placeholder.pyplot(fig, use_container_width=True)
-        results_placeholder.info("Click 'Show Animation' to calculate the multi-stop route.")
-
-with col2:
-    st.markdown("### ℹ️ Legend")
-    with st.expander("Legend", expanded=True):
-        st.markdown("""
-        <div>
-            <div><span style="background:#4caf50; width:20px; height:20px; display:inline-block; border-radius:3px;"></span> Shelter</div>
-            <div><span style="background:#D3D3D3; width:20px; height:20px; display:inline-block; border-radius:3px;"></span> Path</div>
-            <div><span style="background:#ffb74d; width:20px; height:20px; display:inline-block; border-radius:3px; text-align:center;">🪜</span> Stairs</div>
-            <div><span style="background:#2196f3; width:20px; height:20px; display:inline-block; border-radius:3px;"></span> Landmark (A, B, C, D, E)</div>
-            <div><span style="background:#90caf9; width:20px; height:20px; display:inline-block; border-radius:3px;"></span> Explored nodes</div>
-            <div><span style="background:#2979ff; width:20px; height:20px; display:inline-block; border-radius:3px;"></span> Final path 1</div>
-            <div><span style="background:#ff1744; width:20px; height:20px; display:inline-block; border-radius:3px;"></span> Final path 2</div>
-            <div><span style="background:#00e676; width:20px; height:20px; display:inline-block; border-radius:3px;"></span> Final path 3</div>
-            <div><span style="background:#d500f9; width:20px; height:20px; display:inline-block; border-radius:3px;"></span> Final path 4</div>
-            <div><span style="background:#ffea00; width:20px; height:20px; display:inline-block; border-radius:3px;"></span> Final path 5</div>
-            <div>🌳 Wall</div>
-            <div>🏢 Building</div>
-        </div>
-        """, unsafe_allow_html=True)
-
-# Process all routes
-all_visited_nodes = []
-all_paths = []
-current_start = start_pos
-total_overall_cost = 0
-overall_steps = 0
-overall_normal = 0
-overall_shelter = 0
-overall_stair = 0
-path_failed = False
-
-with st.spinner("Computing multi-stop path..."):
-    for idx, dest_pos in enumerate(dest_positions):
-        visited, path = dijkstra_animated(graph, current_start, dest_pos)
-        if path:
-            all_visited_nodes.extend(visited)
-            all_paths.append(path)
-            
-            # Tally metrics
-            steps, shelter_steps, normal_steps, stair_steps, total_cost = get_path_breakdown(maze, path, is_raining)
-            overall_steps += steps
-            overall_shelter += shelter_steps
-            overall_normal += normal_steps
-            overall_stair += stair_steps
-            total_overall_cost += total_cost
-            
-            current_start = dest_pos # Next segment starts where this one ended
-        else:
-            path_failed = True
-            show_unreachable(ax, dest_pos)
-            results_placeholder.error(f"Failed to find path to Destination {idx+1} ({destinations[idx]})")
-            break
-
-if not path_failed and all_paths:
-    update_overlay(ax, [], all_paths)
     with col1:
-        fig_placeholder.pyplot(fig, use_container_width=True)
-        results_placeholder.success(f"Multi-stop Route Found! Total Cost = {total_overall_cost}")
-        
-    with col1:
-        results_placeholder.empty()
-        metric_col1, metric_col2, metric_col3, metric_col4, metric_col5 = st.columns(5)
-        
-        # Use the accumulator variables for the final display
-        normal_cost = 100 if is_raining else 1
-        sheltered_cost = 1
-        stair_cost = 2 if not is_raining else 102
-        
-        with metric_col1:
-            st.metric(f"Normal Steps (Weight = {normal_cost})", overall_normal)
-        with metric_col2:
-            st.metric(f"Sheltered Steps (Weight = {sheltered_cost})", overall_shelter)
-        with metric_col3:
-            st.metric(f"Stairs Taken (Weight = {stair_cost})", overall_stair)
-        with metric_col4:
-            st.metric(f"Total Steps", overall_steps)
-        with metric_col5:
-            st.metric(f"Total Weight", total_overall_cost)
-            
-        # Cost breakdown section
-        st.markdown("### 📊 Total Cost Breakdown")
-        breakdown = (
-            f"Normal Steps: {overall_normal} x {normal_cost} = {overall_normal * normal_cost}\t|\t"
-            f"Sheltered Steps: {overall_shelter} x {sheltered_cost} = {overall_shelter * sheltered_cost}\t|\t"
-            f"Stairs Taken: {overall_stair} x {stair_cost} = {overall_stair * stair_cost}\t\t\n"
-        )
+        st.markdown("### 🗺️ Maze Layout")
+        fig_placeholder = st.empty()
+        results_placeholder = st.empty()
+        if not animate:
+            fig_placeholder.pyplot(fig, use_container_width=True)
+            results_placeholder.info("Click 'Show Animation' to calculate the multi-stop route.")
 
-        st.text(breakdown)
+    with col2:
+        bush_base64 = get_base64_image("bush.png")
+        blk_base64 = get_base64_image("blk.png")
+        stairs_base64 = get_base64_image("stairs.png")
+        st.markdown("### ℹ️ Legend")
+        with st.expander("Legend", expanded=True):
+            st.markdown(f"""
+            <div>
+                <div><span style="background:#4caf50; width:20px; height:20px; display:inline-block; border-radius:3px;"></span> Shelter</div>
+                <div><span style="background:#D3D3D3; width:20px; height:20px; display:inline-block; border-radius:3px;"></span> Path</div>
+                <div><img src="data:image/png;base64,{stairs_base64}" style="width:20px; height:20px; border-radius:3px; vertical-align:middle;"> Stairs (optional / avoidable)</div>
+                <div><span style="background:#2196f3; width:20px; height:20px; display:inline-block; border-radius:3px;"></span> Landmark (A, B, C, D, E)</div>
+                <div><span style="background:#90caf9; width:20px; height:20px; display:inline-block; border-radius:3px;"></span> Explored nodes</div>
+                <div><span style="background:#2979ff; width:20px; height:20px; display:inline-block; border-radius:3px;"></span> Final path 1</div>
+                <div><span style="background:#ff1744; width:20px; height:20px; display:inline-block; border-radius:3px;"></span> Final path 2</div>
+                <div><span style="background:#00e676; width:20px; height:20px; display:inline-block; border-radius:3px;"></span> Final path 3</div>
+                <div><span style="background:#d500f9; width:20px; height:20px; display:inline-block; border-radius:3px;"></span> Final path 4</div>
+                <div><span style="background:#ffea00; width:20px; height:20px; display:inline-block; border-radius:3px;"></span> Final path 5</div>
+                <div><img src="data:image/png;base64,{bush_base64}" style="width:20px; height:20px; border-radius:3px; vertical-align:middle;"> Wall (blocked terrain)</div>
+                <div><img src="data:image/png;base64,{blk_base64}" style="width:20px; height:20px; border-radius:3px; vertical-align:middle;"> Building (impassable area)</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+    # Process all routes
+    all_visited_nodes = []
+    all_paths = []
+    current_start = start_pos
+    total_overall_cost = 0
+    overall_steps = 0
+    overall_normal = 0
+    overall_shelter = 0
+    overall_stair = 0
+    path_failed = False
+
+    with st.spinner("Computing multi-stop path..."):
+        for idx, dest_pos in enumerate(dest_positions):
+            visited, path = dijkstra_animated(graph, current_start, dest_pos)
+            if path:
+                all_visited_nodes.extend(visited)
+                all_paths.append(path)
+                
+                # Tally metrics
+                steps, shelter_steps, normal_steps, stair_steps, total_cost = get_path_breakdown(maze, path, is_raining)
+                overall_steps += steps
+                overall_shelter += shelter_steps
+                overall_normal += normal_steps
+                overall_stair += stair_steps
+                total_overall_cost += total_cost
+                
+                current_start = dest_pos # Next segment starts where this one ended
+            else:
+                path_failed = True
+                show_unreachable(ax, dest_pos)
+                results_placeholder.error(f"Failed to find path to Destination {idx+1} ({destinations[idx]})")
+                break
+
+    if not path_failed and all_paths:
+        update_overlay(ax, [], all_paths)
+        with col1:
+            fig_placeholder.pyplot(fig, use_container_width=True)
+            results_placeholder.success(f"Multi-stop Route Found! Total Cost = {total_overall_cost}")
+            
+        with col1:
+            results_placeholder.empty()
+            metric_col1, metric_col2, metric_col3, metric_col4, metric_col5 = st.columns(5)
+            
+            # Use the accumulator variables for the final display
+            normal_cost = 100 if is_raining else 1
+            sheltered_cost = 1
+            stair_cost = 2 if not is_raining else 102
+            
+            with metric_col1:
+                st.metric(f"Normal Steps (Weight = {normal_cost})", overall_normal)
+            with metric_col2:
+                st.metric(f"Sheltered Steps (Weight = {sheltered_cost})", overall_shelter)
+            with metric_col3:
+                st.metric(f"Stairs Taken (Weight = {stair_cost})", overall_stair)
+            with metric_col4:
+                st.metric(f"Total Steps", overall_steps)
+            with metric_col5:
+                st.metric(f"Total Weight", total_overall_cost)
+                
+            # Cost breakdown section
+            normalstp = overall_normal * normal_cost
+            shelteredstp = overall_shelter * sheltered_cost
+            stairstp = overall_stair * stair_cost
+            st.markdown("### 📊 Total Cost Breakdown")
+            breakdown = (
+                f"Normal Steps: {overall_normal} x {normal_cost} = {normalstp}\t|\t"
+                f"Sheltered Steps: {overall_shelter} x {sheltered_cost} = {shelteredstp}\t|\t"
+                f"Stairs Taken: {overall_stair} x {stair_cost} = {stairstp}\t\t\n"
+            )
+
+            st.text(breakdown)
+            st.markdown(
+                f"<span style='color:yellow; font-weight:bold;'>Total Cost  =  {normalstp}  +  {shelteredstp}  +  {stairstp}  =  {total_overall_cost}</span>",
+                unsafe_allow_html=True
+            )
+
+    step_placeholder = st.empty()
+    progress_bar = st.empty()
+
+    if animate and not path_failed:
+        explored_so_far = []
+        total_steps = len(all_visited_nodes)
+        progress_bar = st.progress(0, text="Animation progress")
+        
+        update_overlay(ax, [], [])
+        frames_to_show = (total_steps + frame_skip - 1) // frame_skip
+        frame_count = 0
+
+        for idx, node in enumerate(all_visited_nodes):
+            explored_so_far.append(node)
+            if (idx + 1) % frame_skip == 0 or idx == total_steps - 1:
+                update_overlay(ax, explored_so_far, [])
+                with col1:
+                    fig_placeholder.pyplot(fig, use_container_width=True)
+                frame_count += 1
+                step_placeholder.markdown(f"**Step {frame_count} / {frames_to_show}**")
+                progress_bar.progress(frame_count / frames_to_show)
+
+        # Draw final multi-colored paths over the explored nodes
+        update_overlay(ax, explored_so_far, all_paths)
+        with col1:
+            fig_placeholder.pyplot(fig, use_container_width=True)
+
+    #check for possiblity of crash
+    def check_zebra_collision(paths, maze, chance=0):
+        for path in paths:
+            for (r, c) in path: 
+                if maze[r][c] == 6 or 8:
+                    if random.random() < chance:
+                        return True
+        return False
+    if not st.session_state.crashed and check_zebra_collision(all_paths, maze, chance=0):
+        st.session_state.crashed = True
         st.markdown(
-            f"<span style='color:yellow; font-weight:bold;'>Total Cost = {total_overall_cost}</span>",
+            """
+            <div style="position:fixed; top:0; left:0; width:100%; height:100%;
+            background-color:black; color:red; display:flex; align-items:center;
+            justify-content:center; font-size:64px; font-weight:bold; z-index:9999;">
+                YOU GOT HIT BY A DRUNK DRIVER
+            </div>
+            """,
             unsafe_allow_html=True
         )
+        with open("FAAH.mp3", "rb") as f:
+            st.audio(f.read(), format="audio/mp3", autoplay=True)
+        st.stop()
 
-step_placeholder = st.empty()
-progress_bar = st.empty()
+    # Footer
+    st.markdown("---")
+    st.markdown("Made with ❤️ by P5-Team 3 | [GitHub Repo](https://github.com/HZ-2502222/INF1008_P5_3/tree/main)")
 
-if animate and not path_failed:
-    explored_so_far = []
-    total_steps = len(all_visited_nodes)
-    progress_bar = st.progress(0, text="Animation progress")
-    
-    update_overlay(ax, [], [])
-    frames_to_show = (total_steps + frame_skip - 1) // frame_skip
-    frame_count = 0
-
-    for idx, node in enumerate(all_visited_nodes):
-        explored_so_far.append(node)
-        if (idx + 1) % frame_skip == 0 or idx == total_steps - 1:
-            update_overlay(ax, explored_so_far, [])
-            with col1:
-                fig_placeholder.pyplot(fig, use_container_width=True)
-            frame_count += 1
-            step_placeholder.markdown(f"**Step {frame_count} / {frames_to_show}**")
-            progress_bar.progress(frame_count / frames_to_show)
-
-    # Draw final multi-colored paths over the explored nodes
-    update_overlay(ax, explored_so_far, all_paths)
-    with col1:
-        fig_placeholder.pyplot(fig, use_container_width=True)
-
-# Crash logic across all paths
-def check_zebra_collision(paths, maze, chance=0.2):
-    for path in paths:
-        for (r, c) in path:
-            if maze[r][c] == 6:  # zebra crossing
-                if random.random() < chance:
-                    return True
-    return False
-
-if not st.session_state.crashed and check_zebra_collision(all_paths, maze, chance=crash_chance):
-    st.session_state.crashed = True
-    st.markdown(
-        """
-        <div style="position:fixed; top:0; left:0; width:100%; height:100%; background-color:black; color:red; display:flex; align-items:center; justify-content:center; font-size:64px; font-weight:bold; z-index:9999;">
-            YOU GOT HIT BY A DRUNK DRIVER
-        </div>
-        """, unsafe_allow_html=True
-    )
-    st.stop()
-
-# Footer
-st.markdown("---")
-st.markdown("Made with ❤️ by P5-Team 3 | [GitHub Repo](https://github.com/HZ-2502222/INF1008_P5_3/tree/main)")
+if __name__ == "__main__":
+    if runtime.exists():
+        main()
+    else:
+        sys.argv = ["streamlit", "run", sys.argv[0]]
+        sys.exit(stcli.main())
