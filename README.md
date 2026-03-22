@@ -3,7 +3,6 @@
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![Streamlit](https://img.shields.io/badge/UI-Streamlit-ff4b4b)
 ![Status](https://img.shields.io/badge/status-academic%20project-informational)
-![License](https://img.shields.io/badge/license-Open%20Source-brightgreen)
 
 🗺️ An accessibility-first, interactive route planning application that computes optimal walking paths across a neighborhood map using **Dijkstra's shortest-path algorithm**. Built with Streamlit, featuring real-time visualization, weather-aware routing, and mobility accommodations.
 
