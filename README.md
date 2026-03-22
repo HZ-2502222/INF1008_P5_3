@@ -524,6 +524,17 @@ Found a bug or have a feature request? Open an issue on GitHub:
 Singapore Institute of Technology (SIT)  
 INF1008: Data Structures and Algorithms
 
+### Team Members
+
+| Name | Student ID | Email |
+|------|------------|-------|
+| Charissa Koh | 2501810 | 2501810@sit.singaporetech.edu.sg |
+| Clifton Ng | 2503193 | 2503193@sit.singaporetech.edu.sg |
+| Javier Soh | 2500119 | 2500119@sit.singaporetech.edu.sg |
+| HuiZhong Liew | 2502222 | 2502222@sit.singaporetech.edu.sg |
+| Sikai Ong | 2501225 | 2501225@sit.singaporetech.edu.sg |
+| Syafiq Yeoh | 2500818 | 2500818@sit.singaporetech.edu.sg |
+
 For inquiries, open an issue on GitHub.
 
 ---
