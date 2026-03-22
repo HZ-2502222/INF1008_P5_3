@@ -1,4 +1,4 @@
-# Digital Clinic Accessibility Router
+# Accessibility Router
 
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![Streamlit](https://img.shields.io/badge/UI-Streamlit-ff4b4b)
@@ -57,7 +57,7 @@ Open your browser to **http://localhost:8501** 🎉
 
 ## 🎯 What This Project Does
 
-The **Digital Clinic Accessibility Router** is an interactive pathfinding application that:
+The **Accessibility Router** is an interactive pathfinding application that:
 
 ✅ **Computes optimal, accessible walking routes** across a grid-based neighborhood map using Dijkstra's shortest-path algorithm
 
